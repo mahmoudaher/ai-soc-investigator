@@ -9,6 +9,7 @@ venv/
 env/
 .venv/
 ENV/
+virt/
 
 # Distribution / packaging
 *.egg-info/

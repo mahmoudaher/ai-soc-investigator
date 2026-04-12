@@ -40,7 +40,10 @@ async def main():
 
     print("\n[+] Graph execution complete! Final Case File State:\n")
     
-    case_file = CaseFile(**final_state)
+    if isinstance(final_state, CaseFile):
+        case_file = final_state
+    else:
+        case_file = CaseFile(**final_state)
     print(case_file.model_dump_json(indent=2))
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import List, Dict, Any, Optional, Literal, Union
+from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime
 import uuid
 
@@ -37,7 +37,7 @@ class EvidenceItem(BaseModel):
     type: EvidenceType
     payload: Dict[str, Any]
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    source: str  # Which agent/tool collected this
+    source: str  # source agent
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     tags: List[str] = Field(default_factory=list)
 
@@ -112,6 +112,31 @@ class Recommendation(BaseModel):
     due_date: Optional[datetime] = None
 
 
+class TriagePlanStep(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    entity_type: Optional[EntityType] = None
+    entity_value: Optional[str] = None
+    goal: str
+    rationale: str
+    priority: Literal["low", "medium", "high", "critical"] = "medium"
+
+
+class TriageAssessment(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    summary: str
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    plan: List[TriagePlanStep] = Field(default_factory=list)
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
 class AgentRun(BaseModel):
     model_config = ConfigDict(frozen=False)
 
@@ -138,6 +163,7 @@ class CaseFile(BaseModel):
     severity: Optional[Severity] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    triage: Optional[TriageAssessment] = None
 
     # Investigation metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)

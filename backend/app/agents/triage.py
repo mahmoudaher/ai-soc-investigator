@@ -1,8 +1,17 @@
-from datetime import datetime
-from backend.app.models.casefile import CaseFile, Entity, TimelineEvent
+from datetime import datetime, timezone
+
+from backend.app.models.casefile import (
+    AgentRun,
+    CaseFile,
+    Entity,
+    TimelineEvent,
+    TriageAssessment,
+    TriagePlanStep,
+)
 
 
 async def triage_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
     alert = state.raw_alert
 
     new_entities = []
@@ -43,9 +52,27 @@ async def triage_agent(state: CaseFile) -> CaseFile:
         category = "network_anomaly"
         severity = "low"
 
+    plan = []
+    for entity in new_entities:
+        if entity.type in {"ip", "host", "domain", "user", "process"}:
+            plan.append(
+                TriagePlanStep(
+                    entity_type=entity.type,
+                    entity_value=entity.value,
+                    goal=f"Validate whether {entity.type} '{entity.value}' is relevant to the alert.",
+                    rationale=f"Triage extracted {entity.type} from the incoming alert and recon should confirm its significance.",
+                    priority=severity,
+                )
+            )
+
+    triage_assessment = TriageAssessment(
+        summary=f"Classified alert as {category} with {severity} severity based on title heuristics and extracted entities.",
+        confidence=0.7,
+        plan=plan,
+    )
 
     timeline_event = TimelineEvent(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         title="Pre-Triage Completed",
         description="Initial triage completed based on heuristic rules.",
         evidence_ids=[],
@@ -53,13 +80,23 @@ async def triage_agent(state: CaseFile) -> CaseFile:
         event_type="analysis"
     )
 
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="triage_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+    )
 
     updated_state = state.model_copy(update={
         "severity": severity,
         "category": category,
         "status": "running",
+        "triage": triage_assessment,
         "entities": state.entities + new_entities,
-        "timeline": state.timeline + [timeline_event]
+        "timeline": state.timeline + [timeline_event],
+        "agent_runs": state.agent_runs + [agent_run],
     })
 
     return updated_state

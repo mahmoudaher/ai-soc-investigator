@@ -59,6 +59,7 @@ class ReconAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(result, CaseFile)
         self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
+        self.assertGreater(result.updated_at, state.updated_at)
 
     async def test_recon_appends_note_evidence_from_triage_plan(self):
         state = build_casefile()

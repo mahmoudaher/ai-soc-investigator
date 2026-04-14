@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from backend.app.models.casefile import (
     AgentRun,
     CaseFile,
@@ -7,11 +5,12 @@ from backend.app.models.casefile import (
     TimelineEvent,
     TriageAssessment,
     TriagePlanStep,
+    utc_now,
 )
 
 
 async def triage_agent(state: CaseFile) -> CaseFile:
-    started_at = datetime.now(timezone.utc)
+    started_at = utc_now()
     alert = state.raw_alert
 
     new_entities = []
@@ -72,7 +71,7 @@ async def triage_agent(state: CaseFile) -> CaseFile:
     )
 
     timeline_event = TimelineEvent(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=utc_now(),
         title="Pre-Triage Completed",
         description="Initial triage completed based on heuristic rules.",
         evidence_ids=[],
@@ -80,7 +79,7 @@ async def triage_agent(state: CaseFile) -> CaseFile:
         event_type="analysis"
     )
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = utc_now()
     agent_run = AgentRun(
         agent="triage_agent",
         status="ok",
@@ -97,6 +96,7 @@ async def triage_agent(state: CaseFile) -> CaseFile:
         "entities": state.entities + new_entities,
         "timeline": state.timeline + [timeline_event],
         "agent_runs": state.agent_runs + [agent_run],
+        "updated_at": finished_at,
     })
 
     return updated_state

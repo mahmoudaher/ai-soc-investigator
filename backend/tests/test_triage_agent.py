@@ -51,8 +51,11 @@ class TriageAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.timeline[-1].agent, "triage_agent")
         self.assertEqual(result.timeline[-1].event_type, "analysis")
         self.assertIsNotNone(result.triage)
+        self.assertTrue(result.triage.summary)
+        self.assertGreater(result.triage.confidence, 0.0)
         self.assertGreater(len(result.triage.plan), 0)
         self.assertEqual(result.agent_runs[-1].agent, "triage_agent")
+        self.assertGreater(result.updated_at, state.updated_at)
 
     async def test_triage_preserves_non_owned_fields(self):
         state = build_casefile()

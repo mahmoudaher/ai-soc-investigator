@@ -1,7 +1,6 @@
-from datetime import datetime, timezone
 from ipaddress import ip_address
 
-from backend.app.models.casefile import AgentRun, CaseFile, EvidenceItem, TimelineEvent
+from backend.app.models.casefile import AgentRun, CaseFile, EvidenceItem, TimelineEvent, utc_now
 
 
 def _is_private_ip(value: str) -> bool:
@@ -12,7 +11,7 @@ def _is_private_ip(value: str) -> bool:
 
 
 async def recon_agent(state: CaseFile) -> CaseFile:
-    started_at = datetime.now(timezone.utc)
+    started_at = utc_now()
     triage = state.triage
     recon_evidence = []
 
@@ -52,7 +51,7 @@ async def recon_agent(state: CaseFile) -> CaseFile:
             )
 
     timeline_event = TimelineEvent(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=utc_now(),
         title="Reconnaissance Completed",
         description=f"Validated {len(recon_evidence)} triage plan items for follow-up investigation.",
         evidence_ids=[item.id for item in recon_evidence],
@@ -60,7 +59,7 @@ async def recon_agent(state: CaseFile) -> CaseFile:
         event_type="analysis",
     )
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = utc_now()
     agent_run = AgentRun(
         agent="recon_agent",
         status="ok",
@@ -75,5 +74,6 @@ async def recon_agent(state: CaseFile) -> CaseFile:
             "evidence": state.evidence + recon_evidence,
             "timeline": state.timeline + [timeline_event],
             "agent_runs": state.agent_runs + [agent_run],
+            "updated_at": finished_at,
         }
     )

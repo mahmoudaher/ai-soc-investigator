@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Dict, Any, Optional, Literal
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -11,6 +11,10 @@ EntityType = Literal["host", "user", "ip", "domain", "process", "file", "registr
 EvidenceType = Literal["log", "nmap", "intel", "note", "pcap", "memory", "network", "file_hash"]
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class Entity(BaseModel):
     model_config = ConfigDict(frozen=False)
 
@@ -18,8 +22,8 @@ class Entity(BaseModel):
     type: EntityType
     value: str
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    first_seen: datetime = Field(default_factory=datetime.utcnow)
-    last_seen: datetime = Field(default_factory=datetime.utcnow)
+    first_seen: datetime = Field(default_factory=utc_now)
+    last_seen: datetime = Field(default_factory=utc_now)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator('confidence')
@@ -36,7 +40,7 @@ class EvidenceItem(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: EvidenceType
     payload: Dict[str, Any]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     source: str  # source agent
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     tags: List[str] = Field(default_factory=list)
@@ -67,7 +71,7 @@ class Hypothesis(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     description: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     supporting_evidence: List[str] = Field(default_factory=list)  # evidence_ids
     status: Literal["active", "confirmed", "rejected", "pending"] = "active"
 
@@ -106,7 +110,7 @@ class Recommendation(BaseModel):
     priority: Literal["low", "medium", "high", "critical"]
     risk: Literal["low", "medium", "high", "critical"]
     rationale: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     status: Literal["pending", "approved", "implemented", "rejected"] = "pending"
     assigned_to: Optional[str] = None
     due_date: Optional[datetime] = None
@@ -166,8 +170,8 @@ class CaseFile(BaseModel):
     triage: Optional[TriageAssessment] = None
 
     # Investigation metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     assigned_to: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     priority: Literal["low", "medium", "high", "critical"] = "medium"
@@ -201,9 +205,9 @@ class CaseFile(BaseModel):
     def add_timeline_event(self, event: TimelineEvent) -> None:
         """Add timeline event"""
         self.timeline.append(event)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
     def update_status(self, new_status: CaseStatus) -> None:
         """Update case status and timestamp"""
         self.status = new_status
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()

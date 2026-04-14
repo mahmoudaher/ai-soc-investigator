@@ -1,7 +1,6 @@
 import asyncio
-from datetime import datetime, timezone
 from typing import Dict, Any
-from backend.app.models.casefile import AgentRun, CaseFile, Entity, TimelineEvent, EvidenceItem 
+from backend.app.models.casefile import AgentRun, CaseFile, Entity, TimelineEvent, EvidenceItem, utc_now 
 
 
 async def fetch_threat_intel(entity: Entity) -> Dict[str, Any]:# in the future Siem tools , edr , ids or ip/domain reputation could be used to retrieve valube information about the entity
@@ -20,7 +19,7 @@ async def fetch_threat_intel(entity: Entity) -> Dict[str, Any]:# in the future S
 
 
 async def evidence_agent(state: CaseFile) -> CaseFile:
-    started_at = datetime.now(timezone.utc)
+    started_at = utc_now()
     new_evidence_list = []
     
     tasks = [fetch_threat_intel(entity) for entity in state.entities]
@@ -41,7 +40,7 @@ async def evidence_agent(state: CaseFile) -> CaseFile:
         new_evidence_list.append(evidence)
         
     timeline_event = TimelineEvent(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=utc_now(),
         title="Evidence Collection Completed",
         description=f"Gathered threat intelligence for {len(state.entities)} entities.",
         evidence_ids=[ev.id for ev in new_evidence_list], 
@@ -49,7 +48,7 @@ async def evidence_agent(state: CaseFile) -> CaseFile:
         event_type="analysis"
     )
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = utc_now()
     agent_run = AgentRun(
         agent="evidence_agent",
         status="ok",
@@ -64,6 +63,7 @@ async def evidence_agent(state: CaseFile) -> CaseFile:
         "evidence": getattr(state, 'evidence', []) + new_evidence_list,
         "timeline": state.timeline + [timeline_event],
         "agent_runs": state.agent_runs + [agent_run],
+        "updated_at": finished_at,
     })
     
     return updated_state

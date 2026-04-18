@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from backend.app.models.casefile import CaseFile, MitreTechnique, TimelineEvent, AgentRun
 
-async def ttp_mapper_agent(state: CaseFile) -> CaseFile:
+async def mapper_agent(state: CaseFile) -> CaseFile:
     started_at = datetime.now(timezone.utc)
     new_mitre_techniques = []
 
@@ -37,13 +37,13 @@ async def ttp_mapper_agent(state: CaseFile) -> CaseFile:
         title="TTP Mapping Completed",
         description=f"Mapped {len(new_mitre_techniques)} MITRE ATT&CK techniques based on heuristic analysis.",
         evidence_ids=[], 
-        agent="ttp_mapper_agent",
+        agent="mapper_agent",
         event_type="analysis"
     )
 
     finished_at = datetime.now(timezone.utc)
     agent_run = AgentRun(
-        agent="ttp_mapper_agent",
+        agent="mapper_agent",
         status="ok",
         started_at=started_at,
         finished_at=finished_at,

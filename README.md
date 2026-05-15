@@ -1,0 +1,5 @@
+“My project is a multi-agent incident analysis system. The idea is that when a security alert arrives, it is not handled by one huge model. Instead, I use several specialized agents. One agent classifies the alert and decides what is important, another validates the entities involved, and another collects supporting evidence. All of them share one structured case file, so the system has memory and every step is traceable.
+
+Up to now, I finished the core state design, the orchestration flow between agents, and the main early agents. I also added tests to make sure the agents work correctly both individually and as a workflow. In parallel, I set up a Wazuh environment with a few vulnerable virtual machines so I can generate realistic alerts for testing instead of relying only on fake examples.
+
+The next phase is to connect this workflow to persistence and APIs, so alerts can come in, be stored as cases, be processed by the agents, and then later be shown in a simple interface. After that, I can add the more advanced agent parts like reporting, LLM-based reasoning, and possibly asynchronous execution.”

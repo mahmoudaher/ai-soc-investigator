@@ -22,7 +22,11 @@ def build_casefile() -> CaseFile:
         evidence=[
             EvidenceItem(
                 type="intel",
-                payload={"entity_value": "192.168.56.10", "entity_type": "ip", "intel": {"reputation": "unknown"}},
+                payload={
+                    "entity_value": "192.168.56.10",
+                    "entity_type": "ip",
+                    "intel": {"reputation": "unknown"},
+                },
                 source="Threat_Intel_API",
                 tags=["baseline"],
             )
@@ -82,7 +86,7 @@ class ReconAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.summary, state.summary)
         self.assertEqual(result.triage, state.triage)
 
-    async def test_recon_repeat_run_is_consistent(self):
+    async def test_recon_repeat_run_does_not_duplicate_recon_evidence(self):
         state = build_casefile()
 
         first_run = await recon_agent(state)
@@ -90,8 +94,39 @@ class ReconAgentTests(unittest.IsolatedAsyncioTestCase):
 
         first_recon_count = len([item for item in first_run.evidence if item.source == "recon_agent"])
         second_recon_count = len([item for item in second_run.evidence if item.source == "recon_agent"])
+
         self.assertEqual(first_recon_count, len(state.triage.plan))
-        self.assertEqual(second_recon_count, len(state.triage.plan) * 2)
+        self.assertEqual(second_recon_count, first_recon_count)
+        self.assertEqual(len(second_run.timeline), len(first_run.timeline))
+        self.assertEqual(len(second_run.agent_runs), len(first_run.agent_runs))
+
+    async def test_recon_skips_when_no_triage_plan_exists(self):
+        state = build_casefile()
+        state.triage = None
+
+        result = await recon_agent(state)
+
+        new_items = [item for item in result.evidence if item.source == "recon_agent"]
+        self.assertEqual(len(new_items), 0)
+        self.assertEqual(result.timeline[-1].agent, "recon_agent")
+        self.assertIn("Skipped", result.timeline[-1].title)
+        self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
+
+    async def test_recon_handles_empty_triage_plan(self):
+        state = build_casefile()
+        state.triage = TriageAssessment(
+            summary="Nothing to validate.",
+            confidence=0.5,
+            plan=[],
+        )
+
+        result = await recon_agent(state)
+
+        new_items = [item for item in result.evidence if item.source == "recon_agent"]
+        self.assertEqual(len(new_items), 0)
+        self.assertEqual(result.timeline[-1].agent, "recon_agent")
+        self.assertIn("Skipped", result.timeline[-1].title)
+        self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
 
 
 if __name__ == "__main__":

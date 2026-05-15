@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from backend.app.agents.evidence import evidence_agent
 from backend.app.models.casefile import CaseFile, Entity, EvidenceItem, TimelineEvent
@@ -52,7 +53,9 @@ class EvidenceAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(hasattr(result, "evidences"))
         self.assertEqual(len(result.evidence), len(state.evidence) + len(state.entities))
-        for item in result.evidence[1:]:
+
+        new_items = result.evidence[len(state.evidence):]
+        for item in new_items:
             self.assertEqual(item.type, "intel")
             self.assertIn("entity_value", item.payload)
             self.assertIn("entity_type", item.payload)
@@ -84,15 +87,48 @@ class EvidenceAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.summary, original_summary)
         self.assertEqual(result.triage, original_triage)
 
-    async def test_evidence_repeat_run_appends_more_evidence_consistently(self):
+    async def test_evidence_repeat_run_does_not_duplicate_evidence(self):
         state = build_casefile()
 
         first_run = await evidence_agent(state)
         second_run = await evidence_agent(first_run)
 
         self.assertEqual(len(first_run.evidence), len(state.evidence) + len(state.entities))
-        self.assertEqual(len(second_run.evidence), len(first_run.evidence) + len(first_run.entities))
-        self.assertEqual(second_run.timeline[-1].agent, "evidence_agent")
+        self.assertEqual(len(second_run.evidence), len(first_run.evidence))
+        self.assertEqual(len(second_run.timeline), len(first_run.timeline))
+        self.assertEqual(len(second_run.agent_runs), len(first_run.agent_runs))
+
+    async def test_evidence_handles_partial_fetch_failure(self):
+        state = build_casefile()
+
+        async def fake_fetch(entity):
+            if entity.type == "ip":
+                raise RuntimeError("intel service down")
+            return {"threat_category": "phishing"}
+
+        with patch("backend.app.agents.evidence.fetch_threat_intel", side_effect=fake_fetch):
+            result = await evidence_agent(state)
+
+        self.assertEqual(len(result.evidence), len(state.evidence) + len(state.entities))
+        self.assertEqual(result.agent_runs[-1].agent, "evidence_agent")
+        self.assertEqual(result.agent_runs[-1].status, "error")
+        self.assertTrue(result.agent_runs[-1].error)
+
+        new_items = result.evidence[len(state.evidence):]
+        self.assertEqual(len(new_items), len(state.entities))
+        self.assertTrue(any(item.confidence <= 0.3 for item in new_items))
+        self.assertTrue(any("error" in item.payload["intel"] for item in new_items))
+
+    async def test_evidence_with_no_entities_adds_no_new_intel_evidence(self):
+        state = build_casefile()
+        state.entities = []
+
+        result = await evidence_agent(state)
+
+        self.assertEqual(len(result.evidence), len(state.evidence))
+        self.assertEqual(result.agent_runs[-1].agent, "evidence_agent")
+        self.assertIn(result.agent_runs[-1].status, {"ok", "error"})
+        self.assertEqual(result.timeline[-1].agent, "evidence_agent")
 
 
 if __name__ == "__main__":

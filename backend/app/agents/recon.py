@@ -1,79 +1,157 @@
-from datetime import datetime, timezone
 from ipaddress import ip_address
 
-from backend.app.models.casefile import AgentRun, CaseFile, EvidenceItem, TimelineEvent
+from backend.app.models.casefile import (
+    AgentRun,
+    CaseFile,
+    EvidenceItem,
+    TimelineEvent,
+    utc_now,
+)
 
 
-def _is_private_ip(value: str) -> bool:
+def _is_private_ip(value: str | None) -> bool:
+    if not value or not isinstance(value, str):
+        return False
     try:
         return ip_address(value).is_private
-    except ValueError:
+    except (ValueError, TypeError):
         return False
 
 
 async def recon_agent(state: CaseFile) -> CaseFile:
-    started_at = datetime.now(timezone.utc)
-    triage = state.triage
-    recon_evidence = []
+    started_at = utc_now()
 
-    if triage:
-        for step in triage.plan:
-            finding = {
-                "goal": step.goal,
-                "rationale": step.rationale,
-                "entity_type": step.entity_type,
-                "entity_value": step.entity_value,
-                "validation": "no_action",
-            }
+    try:
+        # Optional rerun protection
+        already_ran = any(
+            run.agent == "recon_agent" and run.status == "ok"
+            for run in state.agent_runs
+        )
+        if already_ran:
+            return state
 
-            if step.entity_type == "ip" and step.entity_value:
-                finding["validation"] = "private_ip" if _is_private_ip(step.entity_value) else "public_ip"
-            elif step.entity_type == "host" and step.entity_value:
-                hostname = step.entity_value.lower()
-                if any(marker in hostname for marker in ("lab", "test", "dev", "sandbox")):
-                    finding["validation"] = "lab_host"
-                else:
-                    finding["validation"] = "host_observed"
-            elif step.entity_type == "domain" and step.entity_value:
-                finding["validation"] = "domain_observed"
-            elif step.entity_type == "user" and step.entity_value:
-                finding["validation"] = "user_observed"
-            elif step.entity_type == "process" and step.entity_value:
-                finding["validation"] = "process_observed"
+        triage = state.triage
+        recon_evidence = []
 
-            recon_evidence.append(
-                EvidenceItem(
-                    type="note",
-                    payload=finding,
-                    source="recon_agent",
-                    confidence=0.8,
-                    tags=["recon", step.entity_type or "unknown"],
+        if triage and triage.plan:
+            for step in triage.plan:
+                finding = {
+                    "goal": step.goal,
+                    "rationale": step.rationale,
+                    "entity_type": step.entity_type,
+                    "entity_value": step.entity_value,
+                    "validation": "no_action",
+                }
+
+                if step.entity_type == "ip" and step.entity_value:
+                    finding["validation"] = (
+                        "private_ip"
+                        if _is_private_ip(step.entity_value)
+                        else "public_ip"
+                    )
+
+                elif step.entity_type == "host" and step.entity_value:
+                    hostname = step.entity_value.lower()
+                    if any(marker in hostname for marker in ("lab", "test", "dev", "sandbox")):
+                        finding["validation"] = "lab_host"
+                    else:
+                        finding["validation"] = "host_observed"
+
+                elif step.entity_type == "domain" and step.entity_value:
+                    finding["validation"] = "domain_observed"
+
+                elif step.entity_type == "user" and step.entity_value:
+                    finding["validation"] = "user_observed"
+
+                elif step.entity_type == "process" and step.entity_value:
+                    finding["validation"] = "process_observed"
+
+                recon_evidence.append(
+                    EvidenceItem(
+                        type="note",
+                        payload=finding,
+                        source="recon_agent",
+                        confidence=0.8,
+                        tags=["recon", step.entity_type or "unknown"],
+                    )
                 )
+
+            title = "Reconnaissance Completed"
+            description = (
+                f"Validated {len(recon_evidence)} triage plan items for follow-up investigation."
             )
+            run_status = "ok"
+            run_error = None
 
-    timeline_event = TimelineEvent(
-        timestamp=datetime.now(timezone.utc),
-        title="Reconnaissance Completed",
-        description=f"Validated {len(recon_evidence)} triage plan items for follow-up investigation.",
-        evidence_ids=[item.id for item in recon_evidence],
-        agent="recon_agent",
-        event_type="analysis",
-    )
+        else:
+            title = "Reconnaissance Skipped"
+            description = "No triage plan was available for recon validation."
+            run_status = "ok"
+            run_error = None
 
-    finished_at = datetime.now(timezone.utc)
-    agent_run = AgentRun(
-        agent="recon_agent",
-        status="ok",
-        started_at=started_at,
-        finished_at=finished_at,
-        duration_ms=int((finished_at - started_at).total_seconds() * 1000),
-    )
+        finished_at = utc_now()
 
-    return state.model_copy(
-        update={
-            "status": "running",
-            "evidence": state.evidence + recon_evidence,
-            "timeline": state.timeline + [timeline_event],
-            "agent_runs": state.agent_runs + [agent_run],
-        }
-    )
+        timeline_event = TimelineEvent(
+            timestamp=finished_at,
+            title=title,
+            description=description,
+            evidence_ids=[item.id for item in recon_evidence],
+            agent="recon_agent",
+            event_type="analysis",
+        )
+
+        agent_run = AgentRun(
+            agent="recon_agent",
+            status=run_status,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+            error=run_error,
+        )
+
+        return state.model_copy(
+            update={
+                "status": "running",
+                "evidence": state.evidence + recon_evidence,
+                "timeline": state.timeline + [timeline_event],
+                "agent_runs": state.agent_runs + [agent_run],
+                "updated_at": finished_at,
+            }
+        )
+
+    except Exception as e:
+        finished_at = utc_now()
+
+        error_event = TimelineEvent(
+            timestamp=finished_at,
+            title="Reconnaissance Failed",
+            description=f"Recon agent failed: {str(e)}",
+            evidence_ids=[],
+            agent="recon_agent",
+            event_type="analysis",
+        )
+
+        agent_run = AgentRun(
+            agent="recon_agent",
+            status="error",
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+            error=str(e),
+        )
+
+
+
+
+
+
+
+
+        return state.model_copy(
+            update={
+                "status": "failed",
+                "timeline": state.timeline + [error_event],
+                "agent_runs": state.agent_runs + [agent_run],
+                "updated_at": finished_at,
+            }
+        )

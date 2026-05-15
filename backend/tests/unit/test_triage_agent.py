@@ -47,12 +47,17 @@ class TriageAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "running")
         self.assertEqual(result.category, "credential")
         self.assertEqual(result.severity, "medium")
+        self.assertEqual(result.priority, "medium")
         self.assertEqual(len(result.timeline), len(state.timeline) + 1)
         self.assertEqual(result.timeline[-1].agent, "triage_agent")
         self.assertEqual(result.timeline[-1].event_type, "analysis")
         self.assertIsNotNone(result.triage)
+        self.assertTrue(result.triage.summary)
+        self.assertGreater(result.triage.confidence, 0.0)
         self.assertGreater(len(result.triage.plan), 0)
         self.assertEqual(result.agent_runs[-1].agent, "triage_agent")
+        self.assertEqual(result.agent_runs[-1].status, "ok")
+        self.assertGreater(result.updated_at, state.updated_at)
 
     async def test_triage_preserves_non_owned_fields(self):
         state = build_casefile()
@@ -89,6 +94,32 @@ class TriageAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(result.triage.confidence, 0.0)
         self.assertTrue(any(step.entity_type == "ip" for step in result.triage.plan))
         self.assertTrue(any("Validate" in step.goal for step in result.triage.plan))
+
+    async def test_triage_repeat_run_does_not_duplicate_entities(self):
+        state = build_casefile()
+
+        first_run = await triage_agent(state)
+        second_run = await triage_agent(first_run)
+
+        first_entities = {(e.type, e.value) for e in first_run.entities}
+        second_entities = {(e.type, e.value) for e in second_run.entities}
+
+        self.assertEqual(first_entities, second_entities)
+        self.assertEqual(len(second_run.entities), len(first_run.entities))
+        self.assertEqual(len(second_run.triage.plan), 0)
+
+    async def test_triage_records_failure_on_bad_alert_shape(self):
+        state = build_casefile()
+        state.raw_alert["title"] = 123  # .lower() will fail
+
+        result = await triage_agent(state)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.agent_runs[-1].agent, "triage_agent")
+        self.assertEqual(result.agent_runs[-1].status, "error")
+        self.assertTrue(result.agent_runs[-1].error)
+        self.assertEqual(result.timeline[-1].agent, "triage_agent")
+        self.assertIn("Failed", result.timeline[-1].title)
 
 
 if __name__ == "__main__":

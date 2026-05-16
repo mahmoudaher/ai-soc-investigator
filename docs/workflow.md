@@ -11,8 +11,8 @@ config:
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	triage(triage)
-	evidence(evidence)
 	reconnaissance(reconnaissance)
+	evidence(evidence)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> triage;
 	evidence --> reconnaissance;

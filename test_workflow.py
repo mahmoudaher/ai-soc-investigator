@@ -14,12 +14,12 @@ async def main():
     }
 
     initial_state = CaseFile(
-        case_id="TEST-END-TO-END-002",
+        case_id="TEST-LLM-TRIAGE-003",
         raw_alert=mock_raw_alert,
         status="new"
     )
 
-    print(f"[*] Starting complete end-to-end workflow execution for Case: {initial_state.case_id}...")
+    print(f"[*] Starting LLM workflow execution for Case: {initial_state.case_id}...")
     
     final_state = await app.ainvoke(initial_state)
 
@@ -28,16 +28,18 @@ async def main():
     case_file = final_state if isinstance(final_state, CaseFile) else CaseFile(**final_state)
 
     print(f"\n[!] Case Status: {case_file.status}")
-    print(f"[!] Investigation Summary:\n    {case_file.summary}")
+
+    print("\n[!] Triage AI Analysis:")
+    for event in case_file.timeline:
+        if event.agent == "triage_agent":
+            print(f"    - {event.title}")
+            print(f"      {event.description}")
+
+    print(f"\n[!] Investigation Summary:\n    {case_file.summary}")
 
     print(f"\n[!] MITRE ATT&CK Techniques Mapped ({len(case_file.mitre)}):")
     for tech in case_file.mitre:
         print(f"    - [{tech.technique_id}] {tech.name} (Tactic: {tech.tactic})")
-
-    print(f"\n[!] Generated Actionable Recommendations ({len(case_file.recommendations)}):")
-    for rec in case_file.recommendations:
-        print(f"    - Action: {rec.action}")
-        print(f"      Priority: {rec.priority} | Rationale: {rec.rationale}")
 
     print("\n[!] Full Execution Telemetry:")
     for run in case_file.agent_runs:

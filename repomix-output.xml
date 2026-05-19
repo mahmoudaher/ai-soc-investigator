@@ -1,0 +1,2767 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+backend/app/agents/evidence.py
+backend/app/agents/finalizer.py
+backend/app/agents/mapper.py
+backend/app/agents/recon.py
+backend/app/agents/reporter.py
+backend/app/agents/triage.py
+backend/app/core/llm_config.py
+backend/app/db/models.py
+backend/app/db/repository.py
+backend/app/db/session.py
+backend/app/main.py
+backend/app/models/__init__.py
+backend/app/models/casefile.py
+backend/app/normalization/__init__.py
+backend/app/normalization/wazuh.py
+backend/app/orchestration/checkpointing.py
+backend/app/orchestration/graph.py
+backend/requirements.txt
+backend/tests/conftest.py
+backend/tests/contracts/test_casefile_schema.py
+backend/tests/contracts/test_casefile_serialization_agent.py
+backend/tests/fixtures/alerts.py
+backend/tests/fixtures/casefiles.py
+backend/tests/integration/test_graph_workflow.py
+backend/tests/integration/test_wazuh_ingestion_api.py
+backend/tests/unit/test_evidence_agent.py
+backend/tests/unit/test_recon_agent.py
+backend/tests/unit/test_triage_agent.py
+backend/tests/unit/test_wazuh_normalization.py
+docker-compose.yml
+docs/architecture.md
+docs/README.md
+docs/workflow.md
+docs/workflow.mmd
+frontend/README.md
+infrastructure/README.md
+README.md
+requirements.txt
+scripts/export_workflow_graph.py
+scripts/init_db.py
+test_workflow.py
+tool-runner/Dockerfile
+tool-runner/main.py
+workers/requirements.txt
+workers/tasks.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/app/agents/finalizer.py">
+from backend.app.models.casefile import CaseFile, utc_now
+
+
+async def finalizer_node(state: CaseFile) -> CaseFile:
+    if state.status in {"completed", "failed", "escalated"}:
+        return state.model_copy(update={"updated_at": utc_now()})
+
+    has_error = any(run.status == "error" for run in state.agent_runs)
+    final_status = "failed" if has_error else "completed"
+
+    return state.model_copy(
+        update={
+            "status": final_status,
+            "updated_at": utc_now(),
+        }
+    )
+</file>
+
+<file path="backend/app/core/llm_config.py">
+import os
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+load_dotenv()
+
+def get_llm():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("CRITICAL: GEMINI_API_KEY not found in environment variables!")
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.0,
+        max_retries=3
+    )
+    
+    return llm
+</file>
+
+<file path="backend/app/db/models.py">
+from datetime import datetime
+from typing import Any, Optional
+
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class CaseRecord(Base):
+    __tablename__ = "cases"
+    __table_args__ = (
+        Index("ix_cases_status_updated_at", "status", "updated_at"),
+        Index("ix_cases_severity_updated_at", "severity", "updated_at"),
+    )
+
+    case_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    severity: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    category: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, index=True)
+    priority: Mapped[str] = mapped_column(String(32), nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, index=True)
+    raw_alert: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    case_file: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CaseCheckpointRecord(Base):
+    __tablename__ = "case_checkpoints"
+    __table_args__ = (
+        Index("ix_case_checkpoints_case_id_id", "case_id", "id"),
+        Index("ix_case_checkpoints_case_id_node_name", "case_id", "node_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(
+        String(80),
+        ForeignKey("cases.case_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    node_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    severity: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    case_file: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+</file>
+
+<file path="backend/app/db/repository.py">
+from typing import Optional
+
+from sqlalchemy import Select, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.db.models import CaseCheckpointRecord, CaseRecord
+from backend.app.models.casefile import CaseCheckpoint, CaseFile, utc_now
+
+
+def _case_to_record_values(case_file: CaseFile) -> dict:
+    return {
+        "status": case_file.status,
+        "severity": case_file.severity,
+        "category": case_file.category,
+        "priority": case_file.priority,
+        "source": case_file.source,
+        "raw_alert": case_file.raw_alert,
+        "case_file": case_file.model_dump(mode="json"),
+        "created_at": case_file.created_at,
+        "updated_at": case_file.updated_at,
+    }
+
+
+async def upsert_case(session: AsyncSession, case_file: CaseFile) -> CaseRecord:
+    record = await session.get(CaseRecord, case_file.case_id)
+    values = _case_to_record_values(case_file)
+
+    if record is None:
+        record = CaseRecord(case_id=case_file.case_id, **values)
+        session.add(record)
+    else:
+        for field, value in values.items():
+            setattr(record, field, value)
+
+    await session.commit()
+    await session.refresh(record)
+    return record
+
+
+async def get_case(session: AsyncSession, case_id: str) -> Optional[CaseFile]:
+    record = await session.get(CaseRecord, case_id)
+    if record is None:
+        return None
+    return CaseFile.model_validate(record.case_file)
+
+
+async def list_cases(session: AsyncSession, limit: int = 50) -> list[CaseFile]:
+    statement: Select[tuple[CaseRecord]] = (
+        select(CaseRecord)
+        .order_by(CaseRecord.updated_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(statement)
+    return [
+        CaseFile.model_validate(record.case_file)
+        for record in result.scalars().all()
+    ]
+
+
+def _checkpoint_to_model(record: CaseCheckpointRecord) -> CaseCheckpoint:
+    return CaseCheckpoint(
+        id=record.id,
+        case_id=record.case_id,
+        node_name=record.node_name,
+        status=record.status,
+        severity=record.severity,
+        category=record.category,
+        case_file=CaseFile.model_validate(record.case_file),
+        created_at=record.created_at,
+    )
+
+
+async def create_case_checkpoint(
+    session: AsyncSession,
+    case_file: CaseFile,
+    node_name: str,
+) -> CaseCheckpointRecord:
+    record = CaseCheckpointRecord(
+        case_id=case_file.case_id,
+        node_name=node_name,
+        status=case_file.status,
+        severity=case_file.severity,
+        category=case_file.category,
+        case_file=case_file.model_dump(mode="json"),
+        created_at=utc_now(),
+    )
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return record
+
+
+async def list_case_checkpoints(
+    session: AsyncSession,
+    case_id: str,
+    limit: int = 100,
+) -> list[CaseCheckpoint]:
+    statement: Select[tuple[CaseCheckpointRecord]] = (
+        select(CaseCheckpointRecord)
+        .where(CaseCheckpointRecord.case_id == case_id)
+        .order_by(CaseCheckpointRecord.id.asc())
+        .limit(limit)
+    )
+    result = await session.execute(statement)
+    return [
+        _checkpoint_to_model(record)
+        for record in result.scalars().all()
+    ]
+</file>
+
+<file path="backend/app/db/session.py">
+import os
+from collections.abc import AsyncIterator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from backend.app.db.models import Base
+
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/CaseFile",
+)
+
+DB_ECHO = os.getenv("DB_ECHO", "").lower() in {"1", "true", "yes"}
+
+engine = create_async_engine(DATABASE_URL, echo=DB_ECHO)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_db() -> None:
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+</file>
+
+<file path="backend/app/main.py">
+import os
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.db.repository import (
+    create_case_checkpoint,
+    get_case,
+    list_case_checkpoints,
+    list_cases,
+    upsert_case,
+)
+from backend.app.db.session import get_db, init_db
+from backend.app.models.casefile import CaseCheckpoint, CaseFile
+from backend.app.normalization.wazuh import normalize_wazuh_alert
+from backend.app.orchestration.checkpointing import run_case_workflow_with_checkpoints
+
+
+class IngestAlertResponse(BaseModel):
+    case_id: str
+    status: str
+    severity: str | None = None
+    category: str | None = None
+    case_file: CaseFile
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.getenv("AUTO_CREATE_TABLES", "").lower() in {"1", "true", "yes"}:
+        await init_db()
+    yield
+
+
+app = FastAPI(
+    title="AI SOC Investigator API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/alerts/wazuh", response_model=IngestAlertResponse)
+async def ingest_wazuh_alert(
+    alert: dict[str, Any],
+    run_workflow: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+) -> IngestAlertResponse:
+    normalized_alert = normalize_wazuh_alert(alert)
+    case_file = CaseFile(
+        raw_alert=normalized_alert,
+        source=normalized_alert.get("source"),
+    )
+
+    try:
+        await upsert_case(db, case_file)
+        await create_case_checkpoint(db, case_file, "ingest")
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database persistence failed: {error.__class__.__name__}",
+        ) from error
+
+    if run_workflow:
+        try:
+            case_file = await run_case_workflow_with_checkpoints(db, case_file)
+        except Exception as error:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Database persistence failed: {error.__class__.__name__}",
+            ) from error
+
+    return IngestAlertResponse(
+        case_id=case_file.case_id,
+        status=case_file.status,
+        severity=case_file.severity,
+        category=case_file.category,
+        case_file=case_file,
+    )
+
+
+@app.get("/cases", response_model=list[CaseFile])
+async def read_cases(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+) -> list[CaseFile]:
+    try:
+        return await list_cases(db, limit=limit)
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database read failed: {error.__class__.__name__}",
+        ) from error
+
+
+@app.get("/cases/{case_id}", response_model=CaseFile)
+async def read_case(
+    case_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> CaseFile:
+    try:
+        case_file = await get_case(db, case_id)
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database read failed: {error.__class__.__name__}",
+        ) from error
+    if case_file is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case_file
+
+
+@app.get("/cases/{case_id}/checkpoints", response_model=list[CaseCheckpoint])
+async def read_case_checkpoints(
+    case_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+) -> list[CaseCheckpoint]:
+    try:
+        case_file = await get_case(db, case_id)
+        if case_file is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+        return await list_case_checkpoints(db, case_id=case_id, limit=limit)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database read failed: {error.__class__.__name__}",
+        ) from error
+</file>
+
+<file path="backend/app/models/__init__.py">
+
+</file>
+
+<file path="backend/app/normalization/__init__.py">
+from backend.app.normalization.wazuh import normalize_wazuh_alert
+
+__all__ = ["normalize_wazuh_alert"]
+</file>
+
+<file path="backend/app/normalization/wazuh.py">
+from typing import Any
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _nested_get(payload: dict[str, Any], *path: str) -> Any:
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _compact(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if value is not None
+    }
+
+
+def normalize_wazuh_alert(alert: dict[str, Any]) -> dict[str, Any]:
+    rule = alert.get("rule") if isinstance(alert.get("rule"), dict) else {}
+    agent = alert.get("agent") if isinstance(alert.get("agent"), dict) else {}
+    decoder = alert.get("decoder") if isinstance(alert.get("decoder"), dict) else {}
+    data = alert.get("data") if isinstance(alert.get("data"), dict) else {}
+    win_eventdata = _nested_get(data, "win", "eventdata") or {}
+
+    normalized = {
+        "title": _first_present(
+            rule.get("description"),
+            alert.get("full_log"),
+            "Wazuh alert",
+        ),
+        "source": "wazuh",
+        "source_alert_id": alert.get("id"),
+        "timestamp": alert.get("timestamp"),
+        "rule_id": rule.get("id"),
+        "rule_level": rule.get("level"),
+        "rule_groups": rule.get("groups", []),
+        "host": _first_present(
+            agent.get("name"),
+            data.get("hostname"),
+            win_eventdata.get("computer"),
+        ),
+        "agent_id": agent.get("id"),
+        "agent_ip": agent.get("ip"),
+        "ip": _first_present(
+            data.get("srcip"),
+            data.get("src_ip"),
+            data.get("source_ip"),
+            data.get("dstip"),
+            data.get("dest_ip"),
+            data.get("src_ip_addr"),
+            win_eventdata.get("ipAddress"),
+            win_eventdata.get("sourceIp"),
+        ),
+        "user": _first_present(
+            data.get("srcuser"),
+            data.get("user"),
+            data.get("dstuser"),
+            data.get("dst_user"),
+            win_eventdata.get("targetUserName"),
+            win_eventdata.get("subjectUserName"),
+        ),
+        "domain": _first_present(
+            data.get("domain"),
+            data.get("hostname"),
+            data.get("url"),
+            win_eventdata.get("targetDomainName"),
+        ),
+        "process": _first_present(
+            data.get("process"),
+            data.get("program_name"),
+            win_eventdata.get("processName"),
+            win_eventdata.get("image"),
+        ),
+        "location": alert.get("location"),
+        "decoder": decoder.get("name"),
+        "full_log": alert.get("full_log"),
+        "wazuh": alert,
+    }
+
+    return _compact(normalized)
+</file>
+
+<file path="backend/app/orchestration/checkpointing.py">
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.db.repository import create_case_checkpoint, upsert_case
+from backend.app.models.casefile import CaseFile
+from backend.app.orchestration.graph import build_case_workflow
+
+
+async def run_case_workflow_with_checkpoints(
+    session: AsyncSession,
+    case_file: CaseFile,
+) -> CaseFile:
+    workflow = build_case_workflow()
+    latest_case_file = case_file
+
+    async for chunk in workflow.astream(case_file):
+        if not chunk:
+            continue
+
+        node_name, node_state = next(iter(chunk.items()))
+        latest_case_file = (
+            node_state
+            if isinstance(node_state, CaseFile)
+            else CaseFile.model_validate(node_state)
+        )
+        await upsert_case(session, latest_case_file)
+        await create_case_checkpoint(session, latest_case_file, node_name)
+
+    return latest_case_file
+</file>
+
+<file path="backend/requirements.txt">
+
+</file>
+
+<file path="backend/tests/conftest.py">
+
+</file>
+
+<file path="backend/tests/contracts/test_casefile_schema.py">
+
+</file>
+
+<file path="backend/tests/contracts/test_casefile_serialization_agent.py">
+import unittest
+
+from backend.app.agents.recon import recon_agent
+from backend.app.agents.evidence import evidence_agent
+from backend.app.agents.triage import triage_agent
+from backend.app.models.casefile import CaseFile
+
+
+def build_casefile() -> CaseFile:
+    return CaseFile(
+        case_id="CASE-SERIAL-001",
+        raw_alert={
+            "title": "Possible phishing login from suspicious host",
+            "ip": "10.10.10.10",
+            "user": "employee01",
+            "host": "desktop-22",
+            "domain": "suspicious-login.example",
+        },
+    )
+
+
+class CaseFileSerializationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_casefile_round_trip_json_after_agents(self):
+        state = build_casefile()
+
+        triaged = await triage_agent(state)
+        investigated = await evidence_agent(triaged)
+        reconned = await recon_agent(investigated)
+
+        payload = reconned.model_dump_json()
+        restored = CaseFile.model_validate_json(payload)
+
+        self.assertEqual(restored.case_id, reconned.case_id)
+        self.assertEqual(restored.status, reconned.status)
+        self.assertEqual(len(restored.entities), len(reconned.entities))
+        self.assertEqual(len(restored.evidence), len(reconned.evidence))
+        self.assertEqual(len(restored.timeline), len(reconned.timeline))
+        self.assertIsNotNone(restored.triage)
+
+    async def test_serialized_casefile_keeps_required_nested_fields(self):
+        state = build_casefile()
+
+        triaged = await triage_agent(state)
+        investigated = await evidence_agent(triaged)
+        reconned = await recon_agent(investigated)
+        restored = CaseFile.model_validate_json(reconned.model_dump_json())
+
+        self.assertTrue(all(entity.id for entity in restored.entities))
+        self.assertTrue(all(item.id for item in restored.evidence))
+        self.assertTrue(all(event.id for event in restored.timeline))
+        self.assertTrue(all(item.source for item in restored.evidence))
+        self.assertTrue(all(run.agent for run in restored.agent_runs))
+        self.assertTrue(all(step.goal for step in restored.triage.plan))
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/fixtures/alerts.py">
+
+</file>
+
+<file path="backend/tests/fixtures/casefiles.py">
+
+</file>
+
+<file path="backend/tests/integration/test_graph_workflow.py">
+import unittest
+
+from backend.app.models.casefile import CaseFile
+from backend.app.orchestration.graph import build_case_workflow
+
+
+class GraphWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_graph_runs_end_to_end_and_returns_casefile(self):
+        app = build_case_workflow()
+
+        initial_state = CaseFile(
+            case_id="CASE-GRAPH-001",
+            raw_alert={
+                "title": "Suspicious repeated login failures from lab host",
+                "ip": "192.168.1.105",
+                "user": "service_account",
+                "host": "lab-host-01",
+                "domain": "malicious-site.com",
+                "source": "wazuh",
+            },
+        )
+
+        final_state = await app.ainvoke(initial_state)
+        case_file = (
+            final_state
+            if isinstance(final_state, CaseFile)
+            else CaseFile.model_validate(final_state)
+        )
+
+        self.assertIsInstance(case_file, CaseFile)
+
+        # Finalizer should now set terminal state
+        self.assertIn(case_file.status, {"completed", "failed"})
+
+        self.assertGreaterEqual(len(case_file.entities), 4)
+        self.assertEqual(len(case_file.timeline), 3)
+        self.assertGreater(len(case_file.evidence), len(case_file.entities))
+        self.assertIsNotNone(case_file.triage)
+
+        # Finalizer does not add an AgentRun in your current design
+        self.assertEqual(len(case_file.agent_runs), 3)
+
+        # Order now matches graph: triage -> recon -> evidence
+        self.assertEqual(case_file.timeline[0].agent, "triage_agent")
+        self.assertEqual(case_file.timeline[1].agent, "recon_agent")
+        self.assertEqual(case_file.timeline[2].agent, "evidence_agent")
+
+        self.assertTrue(
+            any(
+                item.payload.get("validation") == "private_ip"
+                for item in case_file.evidence
+                if item.source == "recon_agent"
+            )
+        )
+        self.assertTrue(
+            any(
+                item.payload.get("validation") == "lab_host"
+                for item in case_file.evidence
+                if item.source == "recon_agent"
+            )
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/integration/test_wazuh_ingestion_api.py">
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from fastapi.testclient import TestClient
+
+from backend.app.db.session import get_db
+from backend.app.main import app
+from backend.app.models.casefile import CaseCheckpoint, CaseFile, utc_now
+
+
+async def fake_db():
+    yield object()
+
+
+class WazuhIngestionApiTests(unittest.TestCase):
+    def setUp(self):
+        app.dependency_overrides[get_db] = fake_db
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+
+    def test_ingests_wazuh_alert_without_running_workflow(self):
+        raw_alert = {
+            "timestamp": "2026-05-16T10:15:30.123+0000",
+            "rule": {
+                "level": 7,
+                "description": "sshd: authentication failed.",
+                "id": "5716",
+                "groups": ["syslog", "sshd", "authentication_failed"],
+            },
+            "agent": {"id": "002", "name": "ubuntu-victim"},
+            "id": "1778936130.123456",
+            "data": {"srcip": "10.0.2.15", "srcuser": "admin"},
+        }
+
+        with patch(
+            "backend.app.main.upsert_case",
+            new_callable=AsyncMock,
+        ) as upsert, patch(
+            "backend.app.main.create_case_checkpoint",
+            new_callable=AsyncMock,
+        ) as create_checkpoint:
+            client = TestClient(app)
+            response = client.post(
+                "/alerts/wazuh?run_workflow=false",
+                json=raw_alert,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "new")
+        self.assertEqual(payload["case_file"]["raw_alert"]["source"], "wazuh")
+        self.assertEqual(payload["case_file"]["raw_alert"]["ip"], "10.0.2.15")
+        self.assertEqual(payload["case_file"]["raw_alert"]["user"], "admin")
+        self.assertEqual(upsert.await_count, 1)
+        self.assertEqual(create_checkpoint.await_count, 1)
+        self.assertEqual(create_checkpoint.await_args.args[2], "ingest")
+
+    def test_ingests_wazuh_alert_and_checkpoints_each_workflow_node(self):
+        raw_alert = {
+            "timestamp": "2026-05-16T10:15:30.123+0000",
+            "rule": {
+                "level": 7,
+                "description": "sshd: authentication failed.",
+                "id": "5716",
+                "groups": ["syslog", "sshd", "authentication_failed"],
+            },
+            "agent": {"id": "002", "name": "ubuntu-victim"},
+            "id": "1778936130.123456",
+            "data": {"srcip": "10.0.2.15", "srcuser": "admin"},
+        }
+
+        with patch(
+            "backend.app.main.upsert_case",
+            new_callable=AsyncMock,
+        ) as initial_upsert, patch(
+            "backend.app.main.create_case_checkpoint",
+            new_callable=AsyncMock,
+        ) as initial_checkpoint, patch(
+            "backend.app.orchestration.checkpointing.upsert_case",
+            new_callable=AsyncMock,
+        ) as checkpoint_upsert, patch(
+            "backend.app.orchestration.checkpointing.create_case_checkpoint",
+            new_callable=AsyncMock,
+        ) as workflow_checkpoint:
+            client = TestClient(app)
+            response = client.post(
+                "/alerts/wazuh?run_workflow=true",
+                json=raw_alert,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["severity"], "medium")
+        self.assertEqual(payload["category"], "credential")
+        self.assertEqual(initial_upsert.await_count, 1)
+        self.assertEqual(initial_checkpoint.await_count, 1)
+        self.assertEqual(initial_checkpoint.await_args.args[2], "ingest")
+        self.assertEqual(checkpoint_upsert.await_count, 4)
+        self.assertEqual(workflow_checkpoint.await_count, 4)
+
+        checkpoint_statuses = [
+            call.args[1].status
+            for call in checkpoint_upsert.await_args_list
+        ]
+        self.assertEqual(
+            checkpoint_statuses,
+            ["running", "running", "running", "completed"],
+        )
+        checkpoint_names = [
+            call.args[2]
+            for call in workflow_checkpoint.await_args_list
+        ]
+        self.assertEqual(
+            checkpoint_names,
+            ["triage", "recon", "evidence", "finalizer"],
+        )
+
+    def test_reads_case_checkpoints(self):
+        case_file = CaseFile(
+            case_id="CASE-CHECKPOINT-001",
+            raw_alert={"title": "sshd: authentication failed.", "source": "wazuh"},
+        )
+        checkpoint = CaseCheckpoint(
+            id=1,
+            case_id=case_file.case_id,
+            node_name="ingest",
+            status="new",
+            severity=None,
+            category=None,
+            case_file=case_file,
+            created_at=utc_now(),
+        )
+
+        with patch(
+            "backend.app.main.get_case",
+            new_callable=AsyncMock,
+            return_value=case_file,
+        ), patch(
+            "backend.app.main.list_case_checkpoints",
+            new_callable=AsyncMock,
+            return_value=[checkpoint],
+        ):
+            client = TestClient(app)
+            response = client.get(f"/cases/{case_file.case_id}/checkpoints")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["node_name"], "ingest")
+        self.assertEqual(payload[0]["case_id"], case_file.case_id)
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/unit/test_evidence_agent.py">
+import unittest
+from unittest.mock import patch
+
+from backend.app.agents.evidence import evidence_agent
+from backend.app.models.casefile import CaseFile, Entity, EvidenceItem, TimelineEvent
+
+
+def build_casefile() -> CaseFile:
+    return CaseFile(
+        case_id="CASE-EVIDENCE-001",
+        raw_alert={"title": "Phishing domain contacted"},
+        status="running",
+        entities=[
+            Entity(type="ip", value="8.8.8.8"),
+            Entity(type="domain", value="example-bad-site.com"),
+        ],
+        evidence=[
+            EvidenceItem(
+                type="note",
+                payload={"note": "Existing analyst note"},
+                source="analyst",
+                tags=["baseline"],
+            )
+        ],
+        timeline=[
+            TimelineEvent(
+                timestamp=CaseFile.model_fields["created_at"].default_factory(),
+                title="Pre-Triage Completed",
+                description="Initial triage completed based on heuristic rules.",
+                evidence_ids=[],
+                agent="triage_agent",
+                event_type="analysis",
+            )
+        ],
+        summary="Keep me unchanged",
+    )
+
+
+class EvidenceAgentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_evidence_returns_valid_casefile(self):
+        state = build_casefile()
+
+        result = await evidence_agent(state)
+
+        self.assertIsInstance(result, CaseFile)
+        validated = CaseFile.model_validate(result.model_dump())
+        self.assertEqual(validated.case_id, state.case_id)
+
+    async def test_evidence_writes_to_real_evidence_field(self):
+        state = build_casefile()
+
+        result = await evidence_agent(state)
+
+        self.assertFalse(hasattr(result, "evidences"))
+        self.assertEqual(len(result.evidence), len(state.evidence) + len(state.entities))
+
+        new_items = result.evidence[len(state.evidence):]
+        for item in new_items:
+            self.assertEqual(item.type, "intel")
+            self.assertIn("entity_value", item.payload)
+            self.assertIn("entity_type", item.payload)
+            self.assertIn("intel", item.payload)
+
+    async def test_evidence_uses_allowed_status_and_event_type(self):
+        state = build_casefile()
+
+        result = await evidence_agent(state)
+
+        self.assertIn(result.status, {"new", "running", "completed", "failed", "escalated"})
+        self.assertEqual(result.timeline[-1].event_type, "analysis")
+        self.assertEqual(result.timeline[-1].agent, "evidence_agent")
+        self.assertEqual(result.agent_runs[-1].agent, "evidence_agent")
+
+    async def test_evidence_preserves_non_owned_fields(self):
+        state = build_casefile()
+        original_category = state.category
+        original_severity = state.severity
+        original_entities = list(state.entities)
+        original_summary = state.summary
+        original_triage = state.triage
+
+        result = await evidence_agent(state)
+
+        self.assertEqual(result.category, original_category)
+        self.assertEqual(result.severity, original_severity)
+        self.assertEqual(result.entities, original_entities)
+        self.assertEqual(result.summary, original_summary)
+        self.assertEqual(result.triage, original_triage)
+
+    async def test_evidence_repeat_run_does_not_duplicate_evidence(self):
+        state = build_casefile()
+
+        first_run = await evidence_agent(state)
+        second_run = await evidence_agent(first_run)
+
+        self.assertEqual(len(first_run.evidence), len(state.evidence) + len(state.entities))
+        self.assertEqual(len(second_run.evidence), len(first_run.evidence))
+        self.assertEqual(len(second_run.timeline), len(first_run.timeline))
+        self.assertEqual(len(second_run.agent_runs), len(first_run.agent_runs))
+
+    async def test_evidence_handles_partial_fetch_failure(self):
+        state = build_casefile()
+
+        async def fake_fetch(entity):
+            if entity.type == "ip":
+                raise RuntimeError("intel service down")
+            return {"threat_category": "phishing"}
+
+        with patch("backend.app.agents.evidence.fetch_threat_intel", side_effect=fake_fetch):
+            result = await evidence_agent(state)
+
+        self.assertEqual(len(result.evidence), len(state.evidence) + len(state.entities))
+        self.assertEqual(result.agent_runs[-1].agent, "evidence_agent")
+        self.assertEqual(result.agent_runs[-1].status, "error")
+        self.assertTrue(result.agent_runs[-1].error)
+
+        new_items = result.evidence[len(state.evidence):]
+        self.assertEqual(len(new_items), len(state.entities))
+        self.assertTrue(any(item.confidence <= 0.3 for item in new_items))
+        self.assertTrue(any("error" in item.payload["intel"] for item in new_items))
+
+    async def test_evidence_with_no_entities_adds_no_new_intel_evidence(self):
+        state = build_casefile()
+        state.entities = []
+
+        result = await evidence_agent(state)
+
+        self.assertEqual(len(result.evidence), len(state.evidence))
+        self.assertEqual(result.agent_runs[-1].agent, "evidence_agent")
+        self.assertIn(result.agent_runs[-1].status, {"ok", "error"})
+        self.assertEqual(result.timeline[-1].agent, "evidence_agent")
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/unit/test_recon_agent.py">
+import unittest
+
+from backend.app.agents.recon import recon_agent
+from backend.app.models.casefile import (
+    CaseFile,
+    Entity,
+    EvidenceItem,
+    TriageAssessment,
+    TriagePlanStep,
+)
+
+
+def build_casefile() -> CaseFile:
+    return CaseFile(
+        case_id="CASE-RECON-001",
+        raw_alert={"title": "Lab host communicating with internal IP"},
+        status="running",
+        entities=[
+            Entity(type="ip", value="192.168.56.10"),
+            Entity(type="host", value="lab-host-01"),
+        ],
+        evidence=[
+            EvidenceItem(
+                type="intel",
+                payload={
+                    "entity_value": "192.168.56.10",
+                    "entity_type": "ip",
+                    "intel": {"reputation": "unknown"},
+                },
+                source="Threat_Intel_API",
+                tags=["baseline"],
+            )
+        ],
+        triage=TriageAssessment(
+            summary="Internal lab activity needs validation.",
+            confidence=0.8,
+            plan=[
+                TriagePlanStep(
+                    entity_type="ip",
+                    entity_value="192.168.56.10",
+                    goal="Validate whether the IP is internal-only or an external IOC.",
+                    rationale="Private addressing can indicate lab traffic instead of an internet threat.",
+                    priority="medium",
+                ),
+                TriagePlanStep(
+                    entity_type="host",
+                    entity_value="lab-host-01",
+                    goal="Validate whether the host belongs to a lab environment.",
+                    rationale="Lab hosts often generate expected test activity.",
+                    priority="medium",
+                ),
+            ],
+        ),
+        summary="Preserve me",
+    )
+
+
+class ReconAgentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recon_returns_valid_casefile(self):
+        state = build_casefile()
+
+        result = await recon_agent(state)
+
+        self.assertIsInstance(result, CaseFile)
+        self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
+        self.assertGreater(result.updated_at, state.updated_at)
+
+    async def test_recon_appends_note_evidence_from_triage_plan(self):
+        state = build_casefile()
+
+        result = await recon_agent(state)
+
+        new_items = [item for item in result.evidence if item.source == "recon_agent"]
+        self.assertEqual(len(new_items), len(state.triage.plan))
+        self.assertTrue(any(item.payload["validation"] == "private_ip" for item in new_items))
+        self.assertTrue(any(item.payload["validation"] == "lab_host" for item in new_items))
+
+    async def test_recon_preserves_fields_it_does_not_own(self):
+        state = build_casefile()
+
+        result = await recon_agent(state)
+
+        self.assertEqual(result.category, state.category)
+        self.assertEqual(result.severity, state.severity)
+        self.assertEqual(result.entities, state.entities)
+        self.assertEqual(result.summary, state.summary)
+        self.assertEqual(result.triage, state.triage)
+
+    async def test_recon_repeat_run_does_not_duplicate_recon_evidence(self):
+        state = build_casefile()
+
+        first_run = await recon_agent(state)
+        second_run = await recon_agent(first_run)
+
+        first_recon_count = len([item for item in first_run.evidence if item.source == "recon_agent"])
+        second_recon_count = len([item for item in second_run.evidence if item.source == "recon_agent"])
+
+        self.assertEqual(first_recon_count, len(state.triage.plan))
+        self.assertEqual(second_recon_count, first_recon_count)
+        self.assertEqual(len(second_run.timeline), len(first_run.timeline))
+        self.assertEqual(len(second_run.agent_runs), len(first_run.agent_runs))
+
+    async def test_recon_skips_when_no_triage_plan_exists(self):
+        state = build_casefile()
+        state.triage = None
+
+        result = await recon_agent(state)
+
+        new_items = [item for item in result.evidence if item.source == "recon_agent"]
+        self.assertEqual(len(new_items), 0)
+        self.assertEqual(result.timeline[-1].agent, "recon_agent")
+        self.assertIn("Skipped", result.timeline[-1].title)
+        self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
+
+    async def test_recon_handles_empty_triage_plan(self):
+        state = build_casefile()
+        state.triage = TriageAssessment(
+            summary="Nothing to validate.",
+            confidence=0.5,
+            plan=[],
+        )
+
+        result = await recon_agent(state)
+
+        new_items = [item for item in result.evidence if item.source == "recon_agent"]
+        self.assertEqual(len(new_items), 0)
+        self.assertEqual(result.timeline[-1].agent, "recon_agent")
+        self.assertIn("Skipped", result.timeline[-1].title)
+        self.assertEqual(result.agent_runs[-1].agent, "recon_agent")
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/unit/test_triage_agent.py">
+import unittest
+
+from backend.app.agents.triage import triage_agent
+from backend.app.models.casefile import CaseFile, Entity, TimelineEvent
+
+
+def build_casefile() -> CaseFile:
+    return CaseFile(
+        case_id="CASE-TRIAGE-001",
+        raw_alert={
+            "title": "Suspicious repeated login failures from unknown IP",
+            "ip": "192.168.1.105",
+            "user": "service_account",
+            "domain": "malicious-site.com",
+            "process": "powershell.exe",
+        },
+        entities=[Entity(type="host", value="workstation-01")],
+        timeline=[
+            TimelineEvent(
+                timestamp=CaseFile.model_fields["created_at"].default_factory(),
+                title="Case Created",
+                description="Initial case intake.",
+                evidence_ids=[],
+                agent="system",
+                event_type="milestone",
+            )
+        ],
+        summary="Original summary",
+    )
+
+
+class TriageAgentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_triage_returns_valid_casefile(self):
+        state = build_casefile()
+
+        result = await triage_agent(state)
+
+        self.assertIsInstance(result, CaseFile)
+        validated = CaseFile.model_validate(result.model_dump())
+        self.assertEqual(validated.case_id, state.case_id)
+
+    async def test_triage_updates_expected_fields(self):
+        state = build_casefile()
+
+        result = await triage_agent(state)
+
+        self.assertEqual(result.status, "running")
+        self.assertEqual(result.category, "credential")
+        self.assertEqual(result.severity, "medium")
+        self.assertEqual(result.priority, "medium")
+        self.assertEqual(len(result.timeline), len(state.timeline) + 1)
+        self.assertEqual(result.timeline[-1].agent, "triage_agent")
+        self.assertEqual(result.timeline[-1].event_type, "analysis")
+        self.assertIsNotNone(result.triage)
+        self.assertTrue(result.triage.summary)
+        self.assertGreater(result.triage.confidence, 0.0)
+        self.assertGreater(len(result.triage.plan), 0)
+        self.assertEqual(result.agent_runs[-1].agent, "triage_agent")
+        self.assertEqual(result.agent_runs[-1].status, "ok")
+        self.assertGreater(result.updated_at, state.updated_at)
+
+    async def test_triage_preserves_non_owned_fields(self):
+        state = build_casefile()
+        original_summary = state.summary
+        original_evidence = list(state.evidence)
+        original_mitre = list(state.mitre)
+        original_recommendations = list(state.recommendations)
+
+        result = await triage_agent(state)
+
+        self.assertEqual(result.summary, original_summary)
+        self.assertEqual(result.evidence, original_evidence)
+        self.assertEqual(result.mitre, original_mitre)
+        self.assertEqual(result.recommendations, original_recommendations)
+
+    async def test_triage_appends_entities_without_overwriting_existing_ones(self):
+        state = build_casefile()
+
+        result = await triage_agent(state)
+
+        self.assertEqual(result.entities[0].value, "workstation-01")
+        extracted = {(entity.type, entity.value) for entity in result.entities}
+        self.assertIn(("ip", "192.168.1.105"), extracted)
+        self.assertIn(("user", "service_account"), extracted)
+        self.assertIn(("domain", "malicious-site.com"), extracted)
+        self.assertIn(("process", "powershell.exe"), extracted)
+
+    async def test_triage_creates_structured_plan_for_recon(self):
+        state = build_casefile()
+
+        result = await triage_agent(state)
+
+        self.assertIn("credential", result.triage.summary)
+        self.assertGreater(result.triage.confidence, 0.0)
+        self.assertTrue(any(step.entity_type == "ip" for step in result.triage.plan))
+        self.assertTrue(any("Validate" in step.goal for step in result.triage.plan))
+
+    async def test_triage_repeat_run_does_not_duplicate_entities(self):
+        state = build_casefile()
+
+        first_run = await triage_agent(state)
+        second_run = await triage_agent(first_run)
+
+        first_entities = {(e.type, e.value) for e in first_run.entities}
+        second_entities = {(e.type, e.value) for e in second_run.entities}
+
+        self.assertEqual(first_entities, second_entities)
+        self.assertEqual(len(second_run.entities), len(first_run.entities))
+        self.assertEqual(len(second_run.triage.plan), 0)
+
+    async def test_triage_records_failure_on_bad_alert_shape(self):
+        state = build_casefile()
+        state.raw_alert["title"] = 123  # .lower() will fail
+
+        result = await triage_agent(state)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.agent_runs[-1].agent, "triage_agent")
+        self.assertEqual(result.agent_runs[-1].status, "error")
+        self.assertTrue(result.agent_runs[-1].error)
+        self.assertEqual(result.timeline[-1].agent, "triage_agent")
+        self.assertIn("Failed", result.timeline[-1].title)
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="backend/tests/unit/test_wazuh_normalization.py">
+import unittest
+
+from backend.app.normalization.wazuh import normalize_wazuh_alert
+
+
+class WazuhNormalizationTests(unittest.TestCase):
+    def test_normalizes_linux_auth_alert(self):
+        raw_alert = {
+            "timestamp": "2026-05-16T10:15:30.123+0000",
+            "rule": {
+                "level": 7,
+                "description": "sshd: authentication failed.",
+                "id": "5716",
+                "groups": ["syslog", "sshd", "authentication_failed"],
+            },
+            "agent": {
+                "id": "002",
+                "name": "ubuntu-victim",
+                "ip": "192.168.56.20",
+            },
+            "id": "1778936130.123456",
+            "full_log": "Failed password for admin from 10.0.2.15 port 53322 ssh2",
+            "decoder": {"name": "sshd"},
+            "data": {
+                "srcip": "10.0.2.15",
+                "srcuser": "admin",
+                "srcport": "53322",
+            },
+            "location": "/var/log/auth.log",
+        }
+
+        normalized = normalize_wazuh_alert(raw_alert)
+
+        self.assertEqual(normalized["source"], "wazuh")
+        self.assertEqual(normalized["title"], "sshd: authentication failed.")
+        self.assertEqual(normalized["source_alert_id"], "1778936130.123456")
+        self.assertEqual(normalized["rule_id"], "5716")
+        self.assertEqual(normalized["rule_level"], 7)
+        self.assertEqual(normalized["host"], "ubuntu-victim")
+        self.assertEqual(normalized["agent_id"], "002")
+        self.assertEqual(normalized["agent_ip"], "192.168.56.20")
+        self.assertEqual(normalized["ip"], "10.0.2.15")
+        self.assertEqual(normalized["user"], "admin")
+        self.assertEqual(normalized["decoder"], "sshd")
+        self.assertEqual(normalized["wazuh"], raw_alert)
+
+    def test_normalizes_windows_event_fields(self):
+        raw_alert = {
+            "rule": {"description": "Windows logon failure", "level": 5},
+            "agent": {"name": "win-endpoint-01"},
+            "data": {
+                "win": {
+                    "eventdata": {
+                        "targetUserName": "jane",
+                        "ipAddress": "172.16.1.20",
+                        "processName": "C:\\Windows\\System32\\svchost.exe",
+                    }
+                }
+            },
+        }
+
+        normalized = normalize_wazuh_alert(raw_alert)
+
+        self.assertEqual(normalized["host"], "win-endpoint-01")
+        self.assertEqual(normalized["ip"], "172.16.1.20")
+        self.assertEqual(normalized["user"], "jane")
+        self.assertEqual(
+            normalized["process"],
+            "C:\\Windows\\System32\\svchost.exe",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+</file>
+
+<file path="docker-compose.yml">
+
+</file>
+
+<file path="docs/architecture.md">
+# AI SOC Investigator Architecture
+
+## 1. Project Purpose
+
+`ai-soc-investigator` is an agent-based SOC investigation prototype built around a shared `CaseFile` state model and a LangGraph workflow.
+
+The current goal of the project is not full production integration yet. The current codebase is focused on proving that:
+
+- agents can communicate through one shared state object
+- each agent updates only the fields it owns
+- the workflow can be tested end to end
+- the state can be serialized safely for future transport layers such as Kafka
+
+At the moment, the project uses mocked logic and hard-coded enrichment to validate architecture and state flow. These parts are expected to be replaced later with:
+
+- Wazuh as the alert source
+- LLM-backed reasoning in selected agents
+- Kafka as the event backbone between services
+
+## 2. Current Backend Flow
+
+The active workflow is defined in [backend/app/orchestration/graph.py](/c:/Graduation/ai-soc-investigator/backend/app/orchestration/graph.py).
+
+Current agent order:
+
+1. `triage`
+2. `evidence`
+3. `reconnaissance`
+4. `END`
+
+The current LangGraph Mermaid output is:
+
+```mermaid
+graph TD;
+    __start__([__start__])
+    triage(triage)
+    evidence(evidence)
+    reconnaissance(reconnaissance)
+    __end__([__end__])
+    __start__ --> triage;
+    triage --> evidence;
+    evidence --> reconnaissance;
+    reconnaissance --> __end__;
+```
+
+You can regenerate the live graph text from code with:
+
+```python
+from backend.app.orchestration.graph import get_case_workflow_mermaid
+
+print(get_case_workflow_mermaid())
+```
+
+There is also a lower-level LangGraph call available:
+
+```python
+app = build_case_workflow()
+print(app.get_graph().draw_mermaid())
+```
+
+## 3. Core State Model
+
+The shared investigation state is defined in [backend/app/models/casefile.py](/c:/Graduation/ai-soc-investigator/backend/app/models/casefile.py).
+
+### 3.1 Main Model
+
+`CaseFile` is the central object passed through all agents.
+
+Important fields:
+
+- `case_id`: unique case identifier
+- `raw_alert`: original incoming alert payload
+- `status`: current case status
+- `severity`: current severity classification
+- `category`: current case category
+- `subcategory`: optional later refinement
+- `triage`: structured triage result used by downstream agents
+- `created_at`: case creation time
+- `updated_at`: last mutation time
+- `assigned_to`: future analyst ownership
+- `tags`: general case tags
+- `priority`: case handling priority
+- `entities`: extracted observables or subjects
+- `evidence`: normalized evidence items
+- `timeline`: ordered case history
+- `hypotheses`: future analysis hypotheses
+- `mitre`: future ATT&CK mappings
+- `recommendations`: future recommended actions
+- `agent_runs`: execution history for agents
+- `summary`: future high-level report summary
+- `investigation_notes`: free-form notes collection
+
+### 3.2 Supporting Models
+
+#### `Entity`
+
+Represents extracted observables such as:
+
+- IP address
+- host
+- user
+- domain
+- process
+
+Key fields:
+
+- `id`
+- `type`
+- `value`
+- `confidence`
+- `first_seen`
+- `last_seen`
+- `metadata`
+
+#### `EvidenceItem`
+
+Represents normalized evidence produced by agents.
+
+Key fields:
+
+- `id`
+- `type`
+- `payload`
+- `created_at`
+- `source`
+- `confidence`
+- `tags`
+
+#### `TimelineEvent`
+
+Represents major case events.
+
+Key fields:
+
+- `id`
+- `timestamp`
+- `title`
+- `description`
+- `evidence_ids`
+- `agent`
+- `event_type`
+
+#### `TriageAssessment`
+
+Structured output of `triage_agent`.
+
+Key fields:
+
+- `summary`
+- `confidence`
+- `plan`
+
+#### `TriagePlanStep`
+
+Each plan step tells downstream agents what to validate and why.
+
+Key fields:
+
+- `entity_type`
+- `entity_value`
+- `goal`
+- `rationale`
+- `priority`
+
+#### `AgentRun`
+
+Tracks agent execution metadata.
+
+Key fields:
+
+- `agent`
+- `status`
+- `started_at`
+- `finished_at`
+- `error`
+- `duration_ms`
+- `input_tokens`
+- `output_tokens`
+- `cost`
+
+### 3.3 Time Handling
+
+The codebase currently standardizes timestamps through `utc_now()` in [backend/app/models/casefile.py](/c:/Graduation/ai-soc-investigator/backend/app/models/casefile.py).
+
+This is important because:
+
+- Python 3.14 warns against `datetime.utcnow()`
+- timezone-aware UTC is safer for serialization
+- Kafka and distributed processing will need stable timestamps
+
+## 4. Agent Responsibilities
+
+The project currently has three working agents.
+
+### 4.1 `triage_agent`
+
+File: [backend/app/agents/triage.py](/c:/Graduation/ai-soc-investigator/backend/app/agents/triage.py)
+
+Purpose:
+
+- classify the alert
+- extract initial entities
+- produce a structured triage assessment for downstream agents
+
+Reads:
+
+- `raw_alert`
+- existing `entities`
+- existing `timeline`
+- existing `agent_runs`
+
+Writes:
+
+- `severity`
+- `category`
+- `status`
+- `triage.summary`
+- `triage.confidence`
+- `triage.plan`
+- appended `entities`
+- one new `timeline` event
+- one new `agent_runs` entry
+- `updated_at`
+
+Does not own:
+
+- `mitre`
+- `recommendations`
+- `summary`
+
+### 4.2 `evidence_agent`
+
+File: [backend/app/agents/evidence.py](/c:/Graduation/ai-soc-investigator/backend/app/agents/evidence.py)
+
+Purpose:
+
+- enrich extracted entities using mocked threat-intelligence style lookups
+- normalize those results into `EvidenceItem` objects
+
+Reads:
+
+- `entities`
+- existing `evidence`
+- existing `timeline`
+- existing `agent_runs`
+
+Writes:
+
+- appended `evidence`
+- one new `timeline` event
+- one new `agent_runs` entry
+- `updated_at`
+
+Current mock behavior:
+
+- IPs return reputation-style data
+- domains return creation and resolved-IP style data
+- users return login-related data
+- hosts return OS and patch-style data
+
+### 4.3 `recon_agent`
+
+File: [backend/app/agents/recon.py](/c:/Graduation/ai-soc-investigator/backend/app/agents/recon.py)
+
+Purpose:
+
+- validate triage plan items
+- add contextual follow-up notes to evidence
+
+Reads:
+
+- `triage.plan`
+- existing `evidence`
+- existing `timeline`
+- existing `agent_runs`
+
+Writes:
+
+- appended `evidence`
+- one new `timeline` event
+- one new `agent_runs` entry
+- `updated_at`
+
+Current mock behavior:
+
+- classify an IP as `private_ip` or `public_ip`
+- classify a host as `lab_host` or `host_observed`
+- mark domain, user, or process observations
+
+## 5. Ownership Boundaries
+
+The current architecture works best if each agent owns a narrow slice of the `CaseFile`.
+
+Current ownership model:
+
+- `triage_agent` owns classification and triage planning
+- `evidence_agent` owns threat-intel enrichment evidence
+- `recon_agent` owns validation/confirmation evidence
+- future `ttp_mapper_agent` should own `mitre`
+- future `reporter_agent` should own reporting fields such as `summary`
+
+This boundary is important because it prevents uncontrolled field mutation as the workflow grows.
+
+## 6. Current Tests
+
+The main tests live in [backend/tests](/c:/Graduation/ai-soc-investigator/backend/tests).
+
+### `test_triage_agent.py`
+
+Covers:
+
+- schema compatibility
+- field ownership
+- entity extraction
+- triage structure generation
+
+### `test_evidence_agent.py`
+
+Covers:
+
+- schema compatibility
+- correct use of `evidence`
+- enum/status checks
+- ownership preservation
+- repeat-run behavior
+
+### `test_recon_agent.py`
+
+Covers:
+
+- schema compatibility
+- triage-plan-driven recon evidence
+- ownership preservation
+- repeat-run behavior
+
+### `test_casefile_serialization_agent.py`
+
+Covers:
+
+- JSON round-trip of a populated `CaseFile`
+- preservation of nested required fields after serialization
+
+### `test_graph_workflow.py`
+
+Covers:
+
+- end-to-end graph execution
+- triage/evidence/recon ordering
+- timeline and evidence growth
+- recon validation outcomes for lab/private-IP style alerts
+
+## 7. Current Weak Points
+
+The project is moving in a good direction, but these are the main areas that can become hard to manage if not documented clearly:
+
+- `CaseFile` is growing quickly and needs strong ownership discipline
+- future branching workflows may make graph behavior harder to trace
+- agent outputs will become more variable once LLM calls are introduced
+- future Kafka integration will require stable event/message contracts
+- placeholder services such as workers and tool-runner are not implemented yet
+
+## 8. Recommended Documentation Discipline
+
+To keep the project manageable as more agents arrive:
+
+1. Keep this document updated whenever a new agent is added.
+2. For each new agent, document:
+   - what it reads
+   - what it writes
+   - what it must not modify
+3. Keep the graph definition in one place only.
+4. Add a test whenever a new field is introduced into `CaseFile`.
+5. Add a serialization test whenever a new nested model is added.
+
+## 9. Near-Term Roadmap
+
+Expected next additions based on the current design:
+
+- `ttp_mapper_agent`
+  - consumes case context and evidence
+  - writes `mitre`
+  - appends timeline and agent run records
+
+- `reporter_agent`
+  - consumes the final case context
+  - writes case summary/report output
+  - appends timeline and agent run records
+
+- Wazuh ingestion
+  - replaces the current mock alert input
+
+- Kafka transport
+  - moves case updates between services while preserving serialized `CaseFile` compatibility
+
+## 10. Useful Commands
+
+Run all tests:
+
+```powershell
+python -m unittest discover -s backend\tests -v
+```
+
+Print the current graph as Mermaid:
+
+```powershell
+@'
+from backend.app.orchestration.graph import get_case_workflow_mermaid
+print(get_case_workflow_mermaid())
+'@ | python -
+```
+
+Export the current graph into docs files:
+
+```powershell
+python scripts\export_workflow_graph.py
+```
+
+Run the current workflow demo:
+
+```powershell
+python test_workflow.py
+```
+</file>
+
+<file path="docs/workflow.mmd">
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	triage(triage)
+	evidence(evidence)
+	reconnaissance(reconnaissance)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> triage;
+	evidence --> reconnaissance;
+	triage --> evidence;
+	reconnaissance --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+</file>
+
+<file path="frontend/README.md">
+frontend
+</file>
+
+<file path="infrastructure/README.md">
+infrastructur
+</file>
+
+<file path="scripts/export_workflow_graph.py">
+import sys
+from pathlib import Path
+
+
+def main() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+    from backend.app.orchestration.graph import get_case_workflow_mermaid
+
+    docs_dir = repo_root / "docs"
+    docs_dir.mkdir(exist_ok=True)
+
+    mermaid_text = get_case_workflow_mermaid()
+    mermaid_file = docs_dir / "workflow.mmd"
+    markdown_file = docs_dir / "workflow.md"
+
+    mermaid_file.write_text(mermaid_text + "\n", encoding="utf-8")
+    markdown_file.write_text(
+        "# Workflow Diagram\n\n"
+        "This file is generated from `backend/app/orchestration/graph.py`.\n\n"
+        "```mermaid\n"
+        f"{mermaid_text}\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    print(f"Wrote {mermaid_file}")
+    print(f"Wrote {markdown_file}")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="scripts/init_db.py">
+import asyncio
+import sys
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.app.db.session import init_db
+
+
+async def main() -> None:
+    await init_db()
+    print("Initialized database tables.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+</file>
+
+<file path="tool-runner/Dockerfile">
+
+</file>
+
+<file path="tool-runner/main.py">
+
+</file>
+
+<file path="workers/requirements.txt">
+
+</file>
+
+<file path="workers/tasks.py">
+
+</file>
+
+<file path="backend/app/agents/mapper.py">
+from datetime import datetime, timezone
+from typing import List
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from backend.app.models.casefile import CaseFile, MitreTechnique, TimelineEvent, AgentRun
+from backend.app.core.llm_config import get_llm
+
+class ExtractedMitreTechnique(BaseModel):
+    technique_id: str = Field(description="The MITRE ATT&CK technique ID, e.g., 'T1110', 'T1566'")
+    name: str = Field(description="The standard name of the technique")
+    tactic: str = Field(description="The associated overarching tactic, e.g., 'Credential Access', 'Initial Access'")
+    confidence: float = Field(description="Confidence score between 0.0 and 1.0")
+    reason: str = Field(description="1-sentence technical justification for mapping this technique")
+
+class MitreMappingList(BaseModel):
+    mappings: List[ExtractedMitreTechnique]
+
+async def mapper_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
+    
+    if not state.evidence:
+        finished_at = datetime.now(timezone.utc)
+        agent_run = AgentRun(
+            agent="mapper_agent",
+            status="ok",
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=0
+        )
+        return state.model_copy(update={"agent_runs": state.agent_runs + [agent_run]})
+
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(MitreMappingList)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an expert Cyber Threat Intelligence Analyst.
+        Your job is to analyze extracted case evidence and raw alert context, then map them to official MITRE ATT&CK techniques.
+        Provide accurate IDs, tactics, names, and a high-quality technical justification."""),
+        ("human", "Alert Context: {alert_context}\n\nExtracted Evidence Artifacts: {evidence_data}")
+    ])
+    
+    chain = prompt | structured_llm
+    
+    evidence_summary = "\n".join([f"- Type: {ev.type}, Data: {ev.payload}" for ev in state.evidence])
+    
+    mapping_result = await chain.ainvoke({
+        "alert_context": str(state.raw_alert),
+        "evidence_data": evidence_summary
+    })
+    
+    all_evidence_ids = [ev.id for ev in state.evidence]
+    
+    new_mitre_techniques = []
+    for mapping in mapping_result.mappings:
+        tech = MitreTechnique(
+            technique_id=mapping.technique_id,
+            name=mapping.name,
+            tactic=mapping.tactic,
+            confidence=mapping.confidence,
+            reason=mapping.reason,
+            evidence_ids=all_evidence_ids
+        )
+        new_mitre_techniques.append(tech)
+        
+    timeline_event = TimelineEvent(
+        timestamp=datetime.now(timezone.utc),
+        title="AI MITRE ATT&CK Mapping Complete",
+        description=f"Successfully mapped {len(new_mitre_techniques)} ATT&CK techniques based on automated evidence analysis.",
+        agent="mapper_agent",
+        event_type="analysis"
+    )
+    
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="mapper_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000)
+    )
+    
+    return state.model_copy(
+        update={
+            "mitre": state.mitre + new_mitre_techniques,
+            "timeline": state.timeline + [timeline_event],
+            "agent_runs": state.agent_runs + [agent_run]
+        }
+    )
+</file>
+
+<file path="backend/app/agents/reporter.py">
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from backend.app.models.casefile import CaseFile, TimelineEvent, AgentRun
+from backend.app.core.llm_config import get_llm
+
+class InvestigationReport(BaseModel):
+    summary: str = Field(description="A professional, high-level executive summary of the investigation findings.")
+    recommendations: str = Field(description="Bullet-pointed actionable defense and remediation recommendations for SOC analysts.")
+
+async def reporter_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
+    
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(InvestigationReport)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an expert Cyber Security Incident Responder and Reporting Specialist.
+        Your task is to review the complete CaseFile, including triage decisions, extracted evidence, and MITRE ATT&CK mappings.
+        Generate a comprehensive, professional technical summary and clear recommendations for containment and mitigation."""),
+        ("human", """Analyze the completed case file investigation:
+        
+        Alert Context: {alert_context}
+        Evidence Items: {evidence_data}
+        MITRE Techniques: {mitre_data}""")
+    ])
+    
+    chain = prompt | structured_llm
+    
+    evidence_summary = "\n".join([f"- Type: {ev.type}, Tags: {ev.tags}, Data: {ev.payload}" for ev in state.evidence])
+    mitre_summary = "\n".join([f"- [{t.technique_id}] {t.name} (Tactic: {t.tactic})" for t in state.mitre])
+    
+    report_result = await chain.ainvoke({
+        "alert_context": str(state.raw_alert),
+        "evidence_data": evidence_summary,
+        "mitre_data": mitre_summary
+    })
+    
+    timeline_event = TimelineEvent(
+        timestamp=datetime.now(timezone.utc),
+        title="AI Final Incident Report Generated",
+        description="The reporter agent has finalized the case analysis and attached defense recommendations.",
+        agent="reporter_agent",
+        event_type="milestone"
+    )
+    
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="reporter_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000)
+    )
+    
+    return state.model_copy(
+        update={
+            "status": "completed",
+            "summary": f"{report_result.summary}\n\nRecommendations:\n{report_result.recommendations}",
+            "timeline": state.timeline + [timeline_event],
+            "agent_runs": state.agent_runs + [agent_run]
+        }
+    )
+</file>
+
+<file path="docs/README.md">
+docs
+Project documentation entry points:
+
+- [architecture.md](/c:/Graduation/ai-soc-investigator/docs/architecture.md): current backend architecture, state model, agent ownership, workflow, and tests
+- [workflow.md](/c:/Graduation/ai-soc-investigator/docs/workflow.md): generated Mermaid view of the current LangGraph workflow
+</file>
+
+<file path="docs/workflow.md">
+# Workflow Diagram
+
+This file is generated from `backend/app/orchestration/graph.py`.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	triage(triage)
+	reconnaissance(reconnaissance)
+	evidence(evidence)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> triage;
+	evidence --> reconnaissance;
+	triage --> evidence;
+	reconnaissance --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+
+```
+</file>
+
+<file path="README.md">
+“My project is a multi-agent incident analysis system. The idea is that when a security alert arrives, it is not handled by one huge model. Instead, I use several specialized agents. One agent classifies the alert and decides what is important, another validates the entities involved, and another collects supporting evidence. All of them share one structured case file, so the system has memory and every step is traceable.
+
+Up to now, I finished the core state design, the orchestration flow between agents, and the main early agents. I also added tests to make sure the agents work correctly both individually and as a workflow. In parallel, I set up a Wazuh environment with a few vulnerable virtual machines so I can generate realistic alerts for testing instead of relying only on fake examples.
+
+The next phase is to connect this workflow to persistence and APIs, so alerts can come in, be stored as cases, be processed by the agents, and then later be shown in a simple interface. After that, I can add the more advanced agent parts like reporting, LLM-based reasoning, and possibly asynchronous execution.”
+</file>
+
+<file path="requirements.txt">
+annotated-types==0.7.0
+anyio==4.13.0
+asyncpg==0.31.0
+certifi==2026.2.25
+charset-normalizer==3.4.6
+fastapi==0.124.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.11
+jsonpatch==1.33
+jsonpointer==3.1.1
+langchain-core==1.2.22
+langgraph==1.1.3
+langgraph-checkpoint==4.0.1
+langgraph-prebuilt==1.0.8
+langgraph-sdk==0.3.12
+langsmith==0.7.22
+orjson==3.11.7
+ormsgpack==1.12.2
+packaging==26.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+PyYAML==6.0.3
+requests==2.33.0
+requests-toolbelt==1.0.0
+SQLAlchemy==2.0.45
+starlette==0.50.0
+psycopg[binary]==3.3.2
+python-dotenv==1.2.1
+tenacity==9.1.4
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.6.3
+uvicorn==0.38.0
+uuid_utils==0.14.1
+xxhash==3.6.0
+zstandard==0.25.0
+</file>
+
+<file path="backend/app/agents/recon.py">
+import os
+import httpx
+from datetime import datetime, timezone
+from backend.app.models.casefile import CaseFile, TimelineEvent, AgentRun
+
+async def check_virustotal(observable_type: str, observable_value: str, api_key: str) -> dict:
+    headers = {"x-apikey": api_key}
+    base_url = "https://www.virustotal.com/api/v3"
+    
+    if observable_type == "ip":
+        url = f"{base_url}/ip_addresses/{observable_value}"
+    elif observable_type == "domain":
+        url = f"{base_url}/domains/{observable_value}"
+    else:
+        return {"reputation": "Unknown", "details": "Type not supported for VT lookup."}
+
+    # استخدام كلاينت غير متزامن لعدم تعطيل البايبلاين
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                stats = data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+                malicious = stats.get("malicious", 0)
+                suspicious = stats.get("suspicious", 0)
+                
+                if malicious > 0:
+                    reputation = "Malicious"
+                elif suspicious > 0:
+                    reputation = "Suspicious"
+                else:
+                    reputation = "Clean"
+                    
+                details = f"VT Stats: {malicious} malicious, {suspicious} suspicious out of total scans."
+                return {"reputation": reputation, "details": details}
+            elif response.status_code == 404:
+                return {"reputation": "Unknown", "details": "Not found in VirusTotal database."}
+            else:
+                return {"reputation": "Error", "details": f"VT API returned status {response.status_code}"}
+        except Exception as e:
+            return {"reputation": "Error", "details": str(e)}
+
+async def recon_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
+    api_key = os.getenv("VIRUSTOTAL_API_KEY")
+    
+    if not state.evidence or not api_key:
+        finished_at = datetime.now(timezone.utc)
+        agent_run = AgentRun(
+            agent="recon_agent",
+            status="error_no_key" if not api_key else "ok",
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=0
+        )
+        return state.model_copy(update={"agent_runs": state.agent_runs + [agent_run]})
+
+    updated_evidence = []
+    enriched_count = 0
+    
+    for ev in state.evidence:
+        ev_copy = ev.model_copy()
+        val = ev.payload.get("value")
+        
+        # اللوجيك الجديد: تنظيف وتوحيد نوع الداتا ليكون مرناً
+        ev_type_lower = ev.type.lower()
+        vt_type = None
+        if "ip" in ev_type_lower:
+            vt_type = "ip"
+        elif "domain" in ev_type_lower or "url" in ev_type_lower:
+            vt_type = "domain"
+        
+        if val and vt_type:
+            vt_result = await check_virustotal(vt_type, val, api_key)
+            ev_copy.payload["reputation"] = vt_result["reputation"]
+            ev_copy.payload["intel_details"] = vt_result["details"]
+            enriched_count += 1
+        else:
+            ev_copy.payload["reputation"] = "N/A"
+            ev_copy.payload["intel_details"] = "No external intel required."
+            
+        updated_evidence.append(ev_copy)
+        
+    timeline_event = TimelineEvent(
+        timestamp=datetime.now(timezone.utc),
+        title="Real-time Threat Intel Lookup",
+        description=f"Successfully queried VirusTotal for {enriched_count} artifacts.",
+        agent="recon_agent",
+        event_type="analysis"
+    )
+    
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="recon_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000)
+    )
+    
+    return state.model_copy(
+        update={
+            "evidence": updated_evidence,
+            "timeline": state.timeline + [timeline_event],
+            "agent_runs": state.agent_runs + [agent_run]
+        }
+    )
+</file>
+
+<file path="backend/app/models/casefile.py">
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import List, Dict, Any, Optional, Literal
+from datetime import datetime, timezone
+import uuid
+
+
+# Type definitions
+Severity = Literal["low", "medium", "high", "critical"]
+CaseStatus = Literal["new", "running", "completed", "failed", "escalated"]
+EntityType = Literal["host", "user", "ip", "domain", "process", "file", "registry", "url", "email"]
+EvidenceType = Literal["log", "nmap", "intel", "note", "pcap", "memory", "network", "file_hash"]
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Entity(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: EntityType
+    value: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    first_seen: datetime = Field(default_factory=utc_now)
+    last_seen: datetime = Field(default_factory=utc_now)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
+class EvidenceItem(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: EvidenceType
+    payload: Dict[str, Any]
+    created_at: datetime = Field(default_factory=utc_now)
+    source: str  # source agent
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    tags: List[str] = Field(default_factory=list)
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
+class TimelineEvent(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime
+    title: str
+    description: str
+    evidence_ids: List[str] = Field(default_factory=list)
+    agent: str  # Which agent created this event
+    event_type: Literal["analysis", "detection", "action", "milestone"] = "analysis"
+
+
+class Hypothesis(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    description: str
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    created_at: datetime = Field(default_factory=utc_now)
+    supporting_evidence: List[str] = Field(default_factory=list)  # evidence_ids
+    status: Literal["active", "confirmed", "rejected", "pending"] = "active"
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
+class MitreTechnique(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    technique_id: str
+    name: str
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence_ids: List[str]
+    reason: str
+    tactic: Optional[str] = None
+    sub_technique: Optional[str] = None
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
+class Recommendation(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    action: str
+    priority: Literal["low", "medium", "high", "critical"]
+    risk: Literal["low", "medium", "high", "critical"]
+    rationale: str
+    created_at: datetime = Field(default_factory=utc_now)
+    status: Literal["pending", "approved", "implemented", "rejected"] = "pending"
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+
+class TriagePlanStep(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    entity_type: Optional[EntityType] = None
+    entity_value: Optional[str] = None
+    goal: str
+    rationale: str
+    priority: Literal["low", "medium", "high", "critical"] = "medium"
+
+
+class TriageAssessment(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    summary: str
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    plan: List[TriagePlanStep] = Field(default_factory=list)
+
+    @field_validator('confidence')
+    @classmethod
+    def validate_confidence(cls, v):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError('Confidence must be between 0.0 and 1.0')
+        return v
+
+
+class AgentRun(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    agent: str
+    status: Literal["ok", "error", "timeout", "cancelled"]
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    error: Optional[str] = None
+    duration_ms: Optional[int] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    cost: Optional[float] = None
+
+
+class CaseFile(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    # Core identifiers
+    case_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    raw_alert: Dict[str, Any]
+
+    # Status and classification
+    source: Optional[str] = None
+    status: CaseStatus = "new"
+    severity: Optional[Severity] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    triage: Optional[TriageAssessment] = None
+
+    # Investigation metadata
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    assigned_to: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    priority: Literal["low", "medium", "high", "critical"] = "medium"
+
+    # Investigation data
+    entities: List[Entity] = Field(default_factory=list)
+    evidence: List[EvidenceItem] = Field(default_factory=list)
+    timeline: List[TimelineEvent] = Field(default_factory=list)
+    hypotheses: List[Hypothesis] = Field(default_factory=list)
+
+    # Analysis results
+    mitre: List[MitreTechnique] = Field(default_factory=list)
+    recommendations: List[Recommendation] = Field(default_factory=list)
+
+    # Execution tracking
+    agent_runs: List[AgentRun] = Field(default_factory=list)
+
+    # Summary and notes
+    summary: Optional[str] = None
+    investigation_notes: List[Dict[str, Any]] = Field(default_factory=list)  # [{timestamp, author, note}]
+
+    def add_entity(self, entity: Entity) -> None:
+        """Add entity if it doesn't already exist"""
+        if not any(e.value == entity.value and e.type == entity.type for e in self.entities):
+            self.entities.append(entity)
+
+    def add_evidence(self, evidence: EvidenceItem) -> None:
+        """Add evidence item"""
+        self.evidence.append(evidence)
+
+    def add_timeline_event(self, event: TimelineEvent) -> None:
+        """Add timeline event"""
+        self.timeline.append(event)
+        self.updated_at = utc_now()
+
+    def update_status(self, new_status: CaseStatus) -> None:
+        """Update case status and timestamp"""
+        self.status = new_status
+        self.updated_at = utc_now()
+
+
+class CaseCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: int
+    case_id: str
+    node_name: str
+    status: CaseStatus
+    severity: Optional[Severity] = None
+    category: Optional[str] = None
+    case_file: CaseFile
+    created_at: datetime
+</file>
+
+<file path=".gitignore">
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+virt/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# IDE / editor settings
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.example
+</file>
+
+<file path="backend/app/agents/evidence.py">
+import uuid
+from datetime import datetime, timezone
+from typing import List
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from backend.app.models.casefile import CaseFile, EvidenceItem, TimelineEvent, AgentRun
+from backend.app.core.llm_config import get_llm
+
+class ExtractedEvidence(BaseModel):
+    evidence_type: str = Field(description="MUST be one of: 'ip', 'domain', 'user', 'hash', 'url'")
+    value: str = Field(description="The actual value extracted")
+    description: str = Field(description="Brief explanation of this evidence")
+
+class EvidenceExtractionList(BaseModel):
+    items: List[ExtractedEvidence]
+
+async def evidence_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
+    
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(EvidenceExtractionList)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a highly skilled SOC Evidence Extraction Agent.
+        Analyze the raw payload and extract all technical artifacts (IPs, domains, users, etc.).
+        Return them strictly according to the schema."""),
+        ("human", "{payload}")
+    ])
+    
+    chain = prompt | structured_llm
+    
+    extraction_result = await chain.ainvoke({"payload": str(state.raw_alert)})
+    
+    new_evidence_items = []
+    for item in extraction_result.items:
+        ev = EvidenceItem(
+            id=str(uuid.uuid4()),
+            type="intel",
+            source="llm_extractor",
+            tags=["extracted_by_ai", item.evidence_type],
+            payload={
+                "value": item.value,
+                "description": item.description
+            }
+        )
+        new_evidence_items.append(ev)
+        
+    timeline_event = TimelineEvent(
+        timestamp=datetime.now(timezone.utc),
+        title="AI Evidence Extraction Complete",
+        description=f"Successfully extracted {len(new_evidence_items)} artifacts using AI.",
+        agent="evidence_agent",
+        event_type="analysis"
+    )
+    
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="evidence_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000)
+    )
+    
+    return state.model_copy(
+        update={
+            "evidence": state.evidence + new_evidence_items,
+            "timeline": state.timeline + [timeline_event],
+            "agent_runs": state.agent_runs + [agent_run]
+        }
+    )
+</file>
+
+<file path="backend/app/agents/triage.py">
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from backend.app.models.casefile import CaseFile, TimelineEvent, AgentRun
+from backend.app.core.llm_config import get_llm
+
+class TriageAnalysis(BaseModel):
+    severity: str = Field(description="Alert severity level. MUST be one of: 'low', 'medium', 'high', 'critical'.")
+    threat_category: str = Field(description="The general category of the alert, e.g., 'Phishing', 'Brute Force', 'Malware', 'Anomalous Traffic'.")
+    confidence_score: float = Field(description="AI confidence score in this analysis, from 0.0 to 1.0.")
+    reasoning: str = Field(description="A brief, professional 1-sentence technical justification for the severity and category.")
+
+async def triage_agent(state: CaseFile) -> CaseFile:
+    started_at = datetime.now(timezone.utc)
+    
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(TriageAnalysis)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an elite Level 1 SOC Triage Analyst. 
+        Your task is to analyze raw security alerts (Payload) and classify them strictly according to the requested schema.
+        Do not hallucinate. Base your entire analysis ONLY on the provided alert payload."""),
+        ("human", "Analyze the following raw alert data:\n\n{alert_payload}")
+    ])
+    
+    chain = prompt | structured_llm
+    
+    analysis_result = await chain.ainvoke({"alert_payload": str(state.raw_alert)})
+    
+    timeline_event = TimelineEvent(
+        timestamp=datetime.now(timezone.utc),
+        title="AI Triage Analysis Complete",
+        description=f"Alert categorized as {analysis_result.threat_category} ({analysis_result.severity} severity). AI Reasoning: {analysis_result.reasoning}",
+        agent="triage_agent",
+        event_type="analysis"
+    )
+    
+    finished_at = datetime.now(timezone.utc)
+    agent_run = AgentRun(
+        agent="triage_agent",
+        status="ok",
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=int((finished_at - started_at).total_seconds() * 1000)
+    )
+    
+    return state.model_copy(
+        update={
+            "status": "running",
+            "timeline": state.timeline + [timeline_event],
+            "agent_runs": state.agent_runs + [agent_run]
+        }
+    )
+</file>
+
+<file path="test_workflow.py">
+import asyncio
+from backend.app.orchestration.graph import build_case_workflow
+from backend.app.models.casefile import CaseFile
+
+async def main():
+    app = build_case_workflow()
+
+    mock_raw_alert = {
+        "title": "Suspicious repeated login failures and phishing attempt",
+        "ip": "1.2.3.4",
+        "user": "admin_user",
+        "domain": "malicious-phishing-link.com",
+        "source": "wazuh"
+    }
+
+    initial_state = CaseFile(
+        case_id="TEST-LLM-TRIAGE-003",
+        raw_alert=mock_raw_alert,
+        status="new"
+    )
+
+    print(f"[*] Starting LLM workflow execution for Case: {initial_state.case_id}...")
+    
+    final_state = await app.ainvoke(initial_state)
+
+    print("\n[+] Workflow execution complete! Analyzing Final CaseFile...")
+    
+    case_file = final_state if isinstance(final_state, CaseFile) else CaseFile(**final_state)
+
+    print(f"\n[!] Case Status: {case_file.status}")
+
+    print("\n[!] Triage AI Analysis:")
+    for event in case_file.timeline:
+        if event.agent == "triage_agent":
+            print(f"    - {event.title}")
+            print(f"      {event.description}")
+
+    print(f"\n[!] Investigation Summary:\n    {case_file.summary}")
+
+    print(f"\n[!] MITRE ATT&CK Techniques Mapped ({len(case_file.mitre)}):")
+    for tech in case_file.mitre:
+        print(f"    - [{tech.technique_id}] {tech.name} (Tactic: {tech.tactic})")
+
+    print("\n[!] Full Execution Telemetry:")
+    for run in case_file.agent_runs:
+        print(f"    - Agent: {run.agent:.<20} Status: {run.status:.<10} Duration: {run.duration_ms}ms")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+</file>
+
+<file path="backend/app/orchestration/graph.py">
+from langgraph.graph import END, StateGraph
+
+from backend.app.agents.triage import triage_agent
+from backend.app.agents.recon import recon_agent
+from backend.app.agents.mapper import mapper_agent
+from backend.app.agents.evidence import evidence_agent
+from backend.app.agents.reporter import reporter_agent
+from backend.app.agents.finalizer import finalizer_node
+from backend.app.models.casefile import CaseFile
+
+def build_case_workflow():
+    workflow = StateGraph(CaseFile)
+
+    workflow.add_node("triage", triage_agent)
+    workflow.add_node("evidence", evidence_agent)
+    workflow.add_node("recon", recon_agent)
+    workflow.add_node("mapper", mapper_agent)
+    workflow.add_node("reporter", reporter_agent)
+    workflow.add_node("finalizer", finalizer_node)
+    
+    workflow.set_entry_point("triage")
+
+    workflow.add_edge("triage", "evidence")
+    workflow.add_edge("evidence", "recon")
+    workflow.add_edge("recon", "mapper")
+    workflow.add_edge("mapper", "reporter")
+    workflow.add_edge("reporter", "finalizer")
+    workflow.add_edge("finalizer", END)
+
+    return workflow.compile()
+
+def get_case_workflow_mermaid() -> str:
+    return build_case_workflow().get_graph().draw_mermaid()
+</file>
+
+</files>

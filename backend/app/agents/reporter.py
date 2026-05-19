@@ -1,32 +1,49 @@
 from datetime import datetime, timezone
-from backend.app.models.casefile import CaseFile, Recommendation, TimelineEvent, AgentRun
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from backend.app.models.casefile import CaseFile, TimelineEvent, AgentRun
+from backend.app.core.llm_config import get_llm
+
+class InvestigationReport(BaseModel):
+    summary: str = Field(description="A professional, high-level executive summary of the investigation findings.")
+    recommendations: str = Field(description="Bullet-pointed actionable defense and remediation recommendations for SOC analysts.")
 
 async def reporter_agent(state: CaseFile) -> CaseFile:
     started_at = datetime.now(timezone.utc)
-
-    mitre_count = len(state.mitre)
-    evidence_count = len(state.evidence)
-    summary = f"Automated Investigation Complete: Processed {evidence_count} evidence items and successfully mapped {mitre_count} MITRE ATT&CK techniques."
-
-    new_recs = []
-    if mitre_count > 0:
-        technique_names = ", ".join([m.name for m in state.mitre])
-        rec = Recommendation(
-            action="Isolate affected endpoint and block identified malicious IPs/Domains at the firewall.",
-            priority="high",
-            risk="high",
-            rationale=f"Multiple severe ATT&CK techniques detected including: {technique_names}."
-        )
-        new_recs.append(rec)
-
+    
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(InvestigationReport)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an expert Cyber Security Incident Responder and Reporting Specialist.
+        Your task is to review the complete CaseFile, including triage decisions, extracted evidence, and MITRE ATT&CK mappings.
+        Generate a comprehensive, professional technical summary and clear recommendations for containment and mitigation."""),
+        ("human", """Analyze the completed case file investigation:
+        
+        Alert Context: {alert_context}
+        Evidence Items: {evidence_data}
+        MITRE Techniques: {mitre_data}""")
+    ])
+    
+    chain = prompt | structured_llm
+    
+    evidence_summary = "\n".join([f"- Type: {ev.type}, Tags: {ev.tags}, Data: {ev.payload}" for ev in state.evidence])
+    mitre_summary = "\n".join([f"- [{t.technique_id}] {t.name} (Tactic: {t.tactic})" for t in state.mitre])
+    
+    report_result = await chain.ainvoke({
+        "alert_context": str(state.raw_alert),
+        "evidence_data": evidence_summary,
+        "mitre_data": mitre_summary
+    })
+    
     timeline_event = TimelineEvent(
         timestamp=datetime.now(timezone.utc),
-        title="Report Generated",
-        description="Final investigation summary and actionable recommendations created.",
+        title="AI Final Incident Report Generated",
+        description="The reporter agent has finalized the case analysis and attached defense recommendations.",
         agent="reporter_agent",
         event_type="milestone"
     )
-
+    
     finished_at = datetime.now(timezone.utc)
     agent_run = AgentRun(
         agent="reporter_agent",
@@ -35,12 +52,11 @@ async def reporter_agent(state: CaseFile) -> CaseFile:
         finished_at=finished_at,
         duration_ms=int((finished_at - started_at).total_seconds() * 1000)
     )
-
+    
     return state.model_copy(
         update={
             "status": "completed",
-            "summary": summary,
-            "recommendations": state.recommendations + new_recs,
+            "summary": f"{report_result.summary}\n\nRecommendations:\n{report_result.recommendations}",
             "timeline": state.timeline + [timeline_event],
             "agent_runs": state.agent_runs + [agent_run]
         }

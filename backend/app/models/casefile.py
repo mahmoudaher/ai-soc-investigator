@@ -163,6 +163,7 @@ class CaseFile(BaseModel):
     raw_alert: Dict[str, Any]
 
     # Status and classification
+    source: Optional[str] = None
     status: CaseStatus = "new"
     severity: Optional[Severity] = None
     category: Optional[str] = None
@@ -211,3 +212,16 @@ class CaseFile(BaseModel):
         """Update case status and timestamp"""
         self.status = new_status
         self.updated_at = utc_now()
+
+
+class CaseCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=False)
+
+    id: int
+    case_id: str
+    node_name: str
+    status: CaseStatus
+    severity: Optional[Severity] = None
+    category: Optional[str] = None
+    case_file: CaseFile
+    created_at: datetime

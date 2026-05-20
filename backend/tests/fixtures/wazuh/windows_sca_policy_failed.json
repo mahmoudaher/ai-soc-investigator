@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-05-19T09:05:33.045+0000",
+  "rule": {
+    "level": 3,
+    "description": "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0: Ensure 'Enforce password history' is set to '24 or more password(s)'.",
+    "id": "19009",
+    "firedtimes": 1,
+    "mail": false,
+    "groups": [
+      "sca"
+    ],
+    "gdpr": [
+      "IV_35.7.d"
+    ],
+    "pci_dss": [
+      "2.2"
+    ],
+    "nist_800_53": [
+      "CM.1"
+    ],
+    "tsc": [
+      "CC7.1",
+      "CC7.2"
+    ],
+    "cis": [
+      "1.1.1"
+    ],
+    "cis_csc_v8": [
+      "5.2"
+    ],
+    "cis_csc_v7": [
+      "16.2"
+    ],
+    "soc_2": [
+      "CC6.1"
+    ]
+  },
+  "agent": {
+    "id": "002",
+    "name": "Win11",
+    "ip": "10.0.2.15"
+  },
+  "manager": {
+    "name": "Ubuntu"
+  },
+  "id": "1779181533.23453",
+  "decoder": {
+    "name": "sca"
+  },
+  "data": {
+    "sca": {
+      "type": "check",
+      "scan_id": "1769253854",
+      "policy": "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0",
+      "check": {
+        "id": "26000",
+        "title": "Ensure 'Enforce password history' is set to '24 or more password(s)'.",
+        "description": "This policy setting determines the number of renewed, unique passwords that have to be associated with a user account before you can reuse an old password. The value for this policy setting must be between 0 and 24 passwords. The default value for stand-alone systems is 0 passwords, but the default setting when joined to a domain is 24 passwords. To maintain the effectiveness of this policy setting, use the Minimum password age setting to prevent users from repeatedly changing their password. The recommended state for this setting is: 24 or more password(s). Note: Password Policy settings (section 1.1) and Account Lockout Policy settings (section 1.2) must be applied via the Default Domain Policy GPO in order to be globally in effect on domain user accounts as their default behavior. If these settings are configured in another GPO, they will only affect local user accounts on the computers that receive the GPO. However, custom exceptions to the default password policy and account lockout policy rules for specific domain users and/or groups can be defined using Password Settings Objects (PSOs), which are completely separate from Group Policy and most easily configured using Active Directory Administrative Center. Note #2: As of the publication of this benchmark, Microsoft currently has a maximum limit of 24 saved passwords. For more information, please visit Enforce password history (Windows 10) - Windows security | Microsoft Docs.",
+        "rationale": "The longer a user uses the same password, the greater the chance that an attacker can determine the password through brute force attacks. Also, any accounts that may have been compromised will remain exploitable for as long as the password is left unchanged. If password changes are required but password reuse is not prevented, or if users continually reuse a small number of passwords, the effectiveness of a good password policy is greatly reduced. If you specify a low number for this policy setting, users will be able to use the same small number of passwords repeatedly. If you do not also configure the Minimum password age setting, users might repeatedly change their passwords until they can reuse their original password.",
+        "remediation": "To establish the recommended configuration via GP, set the following UI path to 24 or more password(s): Computer Configuration\\Policies\\Windows Settings\\Security Settings\\Account Policies\\Password Policy\\Enforce password history.",
+        "compliance": {
+          "cis": "1.1.1",
+          "cis_csc_v8": "5.2",
+          "cis_csc_v7": "16.2",
+          "cmmc_v2": {
+            "0": "IA.L2-3.5.7"
+          },
+          "pci_dss_v4": {
+            "0": "2.2.2,8.3.5,8.3.6,8.6.3"
+          },
+          "soc_2": "CC6.1"
+        },
+        "references": "https://www.cisecurity.org/white-papers/cis-password-policy-guide/,https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/password-policy",
+        "command": [
+          "powershell secedit /export /cfg $env:TEMP\\secpol.cfg; Get-Content $env:TEMP\\secpol.cfg | Select-String \"PasswordHistorySize\"; Remove-Item $env:TEMP\\secpol.cfg"
+        ],
+        "result": "not applicable",
+        "reason": "Timeout overtaken running command 'powershell secedit /export /cfg $env:TEMP\\secpol.cfg; Get-Content $env:TEMP\\secpol.cfg | Select-String \"PasswordHistorySize\"; Remove-Item $env:TEMP\\secpol.cfg'"
+      }
+    }
+  },
+  "location": "sca"
+}

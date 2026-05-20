@@ -32,3 +32,47 @@ Thumbs.db
 # Environment variables
 .env
 .env.example
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend dependencies and build output
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+**/out/
+coverage/
+**/coverage/
+.turbo/
+**/.turbo/
+.vite/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+next-dev.log
+**/next-dev.log
+*.tsbuildinfo
+**/*.tsbuildinfo
+.env.local
+**/.env.local
+.vercel/
+**/.vercel/
+
+# Local Wazuh/lab exports used for normalization research.
+# Keep curated test fixtures under backend/tests/fixtures/wazuh tracked.
+/*.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/components.json
+!/skills-lock.json
+!/.oxlintrc.json
+!/.oxfmtrc.json

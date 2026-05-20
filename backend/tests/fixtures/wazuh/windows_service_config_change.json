@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-05-19T09:30:16.007+0000",
+  "rule": {
+    "level": 3,
+    "description": "Service startup type was changed",
+    "id": "61104",
+    "info": "This does not appear to be logged on Windows 2000",
+    "firedtimes": 10,
+    "mail": false,
+    "groups": [
+      "windows",
+      "windows_system",
+      "policy_changed"
+    ],
+    "pci_dss": [
+      "10.6"
+    ],
+    "gdpr": [
+      "IV_35.7.d"
+    ],
+    "hipaa": [
+      "164.312.b"
+    ],
+    "nist_800_53": [
+      "AU.6"
+    ],
+    "tsc": [
+      "CC6.1",
+      "CC6.8",
+      "CC7.2",
+      "CC7.3"
+    ]
+  },
+  "agent": {
+    "id": "002",
+    "name": "Win11",
+    "ip": "10.0.2.15"
+  },
+  "manager": {
+    "name": "Ubuntu"
+  },
+  "id": "1779183016.2388888",
+  "decoder": {
+    "name": "windows_eventchannel"
+  },
+  "data": {
+    "win": {
+      "system": {
+        "providerName": "Service Control Manager",
+        "providerGuid": "{555908d1-a6d7-4695-8e1e-26931d2012f4}",
+        "eventSourceName": "Service Control Manager",
+        "eventID": "7040",
+        "version": "0",
+        "level": "4",
+        "task": "0",
+        "opcode": "0",
+        "keywords": "0x8080000000000000",
+        "systemTime": "2026-05-19T19:30:09.4612822Z",
+        "eventRecordID": "939",
+        "processID": "792",
+        "threadID": "8000",
+        "channel": "System",
+        "computer": "Ahmed-364",
+        "severityValue": "INFORMATION",
+        "message": "\"The start type of the OpenSSH SSH Server service was changed from demand start to auto start.\""
+      },
+      "eventdata": {
+        "param1": "OpenSSH SSH Server",
+        "param2": "demand start",
+        "param3": "auto start",
+        "param4": "sshd"
+      }
+    }
+  },
+  "location": "EventChannel"
+}

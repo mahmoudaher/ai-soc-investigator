@@ -1,0 +1,4 @@
+allowBuilds:
+  '@clerk/shared': false
+  '@sentry/cli': false
+  sharp: false

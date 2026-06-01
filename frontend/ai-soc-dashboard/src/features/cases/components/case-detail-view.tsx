@@ -8,8 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { useQuery } from '@tanstack/react-query';
 import { caseByIdOptions, caseCheckpointsOptions } from '../api/queries';
-import type { CaseFile } from '../api/types';
-import { SeverityBadge, StatusBadge } from './case-badges';
+import type { CaseCheckpoint, CaseFile } from '../api/types';
+import { AgentStatusBadge, SeverityBadge, StatusBadge } from './case-badges';
 
 type CaseDetailViewProps = {
   caseId: string;
@@ -72,6 +72,46 @@ function MetricCard({
 function RawAlertTitle({ caseFile }: { caseFile: CaseFile }) {
   const title = caseFile.raw_alert.title;
   return typeof title === 'string' && title.length > 0 ? title : 'Wazuh alert investigation';
+}
+
+type AgentCheckpointStatus = 'ok' | 'error' | 'timeout' | 'cancelled' | 'running';
+
+function normalizeAgentRunStatus(status?: string | null): AgentCheckpointStatus {
+  switch (status) {
+    case 'ok':
+    case 'error':
+    case 'timeout':
+    case 'cancelled':
+      return status;
+    case 'error_no_key':
+      return 'error';
+    default:
+      return 'running';
+  }
+}
+
+function checkpointAgentStatus(checkpoint: CaseCheckpoint): AgentCheckpointStatus {
+  const nodeName = checkpoint.node_name.toLowerCase();
+  const agentRun = checkpoint.case_file.agent_runs.find((run) => {
+    const agentName = run.agent.toLowerCase();
+    return (
+      agentName === nodeName ||
+      agentName === `${nodeName}_agent` ||
+      agentName.startsWith(`${nodeName}_`)
+    );
+  });
+
+  if (agentRun) {
+    return normalizeAgentRunStatus(agentRun.status);
+  }
+
+  if (nodeName === 'finalizer') {
+    if (checkpoint.case_file.status === 'completed') return 'ok';
+    if (checkpoint.case_file.status === 'failed') return 'error';
+    if (checkpoint.case_file.status === 'escalated') return 'error';
+  }
+
+  return 'running';
 }
 
 export default function CaseDetailView({ caseId }: CaseDetailViewProps) {
@@ -290,7 +330,7 @@ export default function CaseDetailView({ caseId }: CaseDetailViewProps) {
                       {formatDate(checkpoint.created_at)}
                     </p>
                   </div>
-                  <StatusBadge status={checkpoint.status} />
+                  <AgentStatusBadge status={checkpointAgentStatus(checkpoint)} />
                 </div>
               ))
             ) : (

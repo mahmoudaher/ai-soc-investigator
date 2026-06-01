@@ -11,28 +11,40 @@ import {
 } from '@/components/ui/chart';
 import { Badge } from '@/components/ui/badge';
 import { Icons } from '@/components/icons';
-
-const chartData = [
-  { month: 'January', endpoint: 18, network: 8 },
-  { month: 'February', endpoint: 30, network: 20 },
-  { month: 'March', endpoint: 23, network: 12 },
-  { month: 'April', endpoint: 17, network: 19 },
-  { month: 'May', endpoint: 29, network: 13 },
-  { month: 'June', endpoint: 24, network: 14 }
-];
+import { useQuery } from '@tanstack/react-query';
+import { caseSummaryQueryOptions } from '@/features/cases/api/queries';
+import { buildSourceSeries } from '../utils/case-aggregations';
+import { BarGraphSkeleton } from './bar-graph-skeleton';
 
 const chartConfig = {
-  endpoint: {
-    label: 'Endpoint',
+  cases: {
+    label: 'Cases',
     color: 'var(--chart-1)'
-  },
-  network: {
-    label: 'Network',
-    color: 'var(--chart-2)'
   }
 } satisfies ChartConfig;
 
 export function BarGraph() {
+  const { data, isError, isLoading } = useQuery(caseSummaryQueryOptions());
+  const chartData = buildSourceSeries(data ?? []);
+
+  if (isLoading) {
+    return <BarGraphSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Case Volume by Source</CardTitle>
+          <CardDescription>Unable to load source distribution</CardDescription>
+        </CardHeader>
+        <CardContent className='text-muted-foreground text-sm'>
+          Check that the FastAPI backend is running.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -59,27 +71,20 @@ export function BarGraph() {
               <DottedBackgroundPattern />
             </defs>
             <XAxis
-              dataKey='month'
+              dataKey='source'
               tickLine={false}
               tickMargin={10}
               axisLine={false}
-              tickFormatter={(value) => value.slice(0, 3)}
             />
             <ChartTooltip
               cursor={false}
               content={<ChartTooltipContent indicator='dashed' hideLabel />}
             />
             <Bar
-              dataKey='endpoint'
+              dataKey='cases'
               color='var(--chart-1)'
-              fill='var(--color-endpoint)'
+              fill='var(--color-cases)'
               shape={<CustomHatchedBar isHatched={false} />}
-              radius={4}
-            />
-            <Bar
-              dataKey='network'
-              fill='var(--color-network)'
-              shape={<CustomHatchedBar />}
               radius={4}
             />
           </BarChart>

@@ -11,16 +11,10 @@ import {
 } from '@/components/ui/chart';
 import { Badge } from '@/components/ui/badge';
 import { Icons } from '@/components/icons';
-import React from 'react';
-
-const chartData = [
-  { month: 'January', open: 14, closed: 9 },
-  { month: 'February', open: 21, closed: 14 },
-  { month: 'March', open: 18, closed: 16 },
-  { month: 'April', open: 24, closed: 19 },
-  { month: 'May', open: 16, closed: 22 },
-  { month: 'June', open: 12, closed: 24 }
-];
+import { useQuery } from '@tanstack/react-query';
+import { caseSummaryQueryOptions } from '@/features/cases/api/queries';
+import { buildThroughputSeries } from '../utils/case-aggregations';
+import { AreaGraphSkeleton } from './area-graph-skeleton';
 
 const chartConfig = {
   open: {
@@ -34,6 +28,27 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function AreaGraph() {
+  const { data, isError, isLoading } = useQuery(caseSummaryQueryOptions());
+  const chartData = buildThroughputSeries(data ?? []);
+
+  if (isLoading) {
+    return <AreaGraphSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Investigation Throughput</CardTitle>
+          <CardDescription>Unable to load live throughput data</CardDescription>
+        </CardHeader>
+        <CardContent className='text-muted-foreground text-sm'>
+          Check that the FastAPI backend is running.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>

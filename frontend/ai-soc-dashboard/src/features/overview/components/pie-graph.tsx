@@ -11,14 +11,10 @@ import {
 } from '@/components/ui/chart';
 import { Badge } from '@/components/ui/badge';
 import { Icons } from '@/components/icons';
-
-const chartData = [
-  { severity: 'critical', cases: 4, fill: 'var(--color-critical)' },
-  { severity: 'high', cases: 11, fill: 'var(--color-high)' },
-  { severity: 'medium', cases: 18, fill: 'var(--color-medium)' },
-  { severity: 'low', cases: 9, fill: 'var(--color-low)' },
-  { severity: 'unknown', cases: 6, fill: 'var(--color-unknown)' }
-];
+import { useQuery } from '@tanstack/react-query';
+import { caseSummaryQueryOptions } from '@/features/cases/api/queries';
+import { buildSeverityMix } from '../utils/case-aggregations';
+import { PieGraphSkeleton } from './pie-graph-skeleton';
 
 const chartConfig = {
   cases: {
@@ -47,6 +43,30 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function PieGraph() {
+  const { data, isError, isLoading } = useQuery(caseSummaryQueryOptions());
+  const chartData = buildSeverityMix(data ?? []).map((item) => ({
+    ...item,
+    fill: `var(--color-${item.severity})`
+  }));
+
+  if (isLoading) {
+    return <PieGraphSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <Card className='flex h-full flex-col'>
+        <CardHeader className='items-center pb-0'>
+          <CardTitle>Severity Mix</CardTitle>
+          <CardDescription>Unable to load severity distribution</CardDescription>
+        </CardHeader>
+        <CardContent className='text-muted-foreground text-sm'>
+          Check that the FastAPI backend is running.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className='flex h-full flex-col'>
       <CardHeader className='items-center pb-0'>

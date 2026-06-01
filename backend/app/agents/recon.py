@@ -48,12 +48,18 @@ async def recon_agent(state: CaseFile) -> CaseFile:
         finished_at = datetime.now(timezone.utc)
         agent_run = AgentRun(
             agent="recon_agent",
-            status="error_no_key" if not api_key else "ok",
+            status="error" if not api_key else "ok",
+            error="VIRUSTOTAL_API_KEY missing" if not api_key else None,
             started_at=started_at,
             finished_at=finished_at,
             duration_ms=0
         )
-        return state.model_copy(update={"agent_runs": state.agent_runs + [agent_run]})
+        return state.model_copy(
+            update={
+                "updated_at": finished_at,
+                "agent_runs": state.agent_runs + [agent_run]
+            }
+        )
 
     updated_evidence = []
     enriched_count = 0
@@ -104,6 +110,7 @@ async def recon_agent(state: CaseFile) -> CaseFile:
     return state.model_copy(
         update={
             "evidence": updated_evidence,
+            "updated_at": finished_at,
             "timeline": state.timeline + [timeline_event],
             "agent_runs": state.agent_runs + [agent_run]
         }

@@ -41,7 +41,6 @@ app = FastAPI(
 async def health() -> dict[str, str]:
     return {"status": "ok"}
 
-# دالة مساعدة لتشغيل البايبلاين في الخلفية مع سيشن مستقلة للداتا بيز
 async def background_workflow_runner(case_id: str):
     async with AsyncSessionLocal() as session:
         case_file = await get_case(session, case_id)
@@ -73,7 +72,6 @@ async def ingest_wazuh_alert(
             detail=f"Database persistence failed: {error.__class__.__name__}",
         ) from error
 
-    # إرسال العمل الثقيل للخلفية بدلاً من تعطيل استجابة السيرفر
     if run_workflow:
         background_tasks.add_task(background_workflow_runner, case_file.case_id)
 

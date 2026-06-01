@@ -65,6 +65,7 @@ async def evidence_agent(state: CaseFile) -> CaseFile:
     return state.model_copy(
         update={
             "evidence": state.evidence + new_evidence_items,
+            "updated_at": finished_at,
             "timeline": state.timeline + [timeline_event],
             "agent_runs": state.agent_runs + [agent_run]
         }

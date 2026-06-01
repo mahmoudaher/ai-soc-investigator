@@ -47,6 +47,7 @@ async def triage_agent(state: CaseFile) -> CaseFile:
     return state.model_copy(
         update={
             "status": "running",
+            "updated_at": finished_at,
             "timeline": state.timeline + [timeline_event],
             "agent_runs": state.agent_runs + [agent_run]
         }

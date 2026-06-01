@@ -97,7 +97,7 @@ export type Recommendation = {
 
 export type AgentRun = {
   agent: string;
-  status: 'ok' | 'error' | 'timeout' | 'cancelled';
+  status: 'ok' | 'error' | 'timeout' | 'cancelled' | 'error_no_key';
   started_at: string;
   finished_at?: string | null;
   error?: string | null;

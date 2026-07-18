@@ -31,7 +31,7 @@ Thumbs.db
 
 # Environment variables
 .env
-.env.example
+!.env.example
 
 # Python tooling caches
 .pytest_cache/

@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai-soc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: CaseFile
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ai_soc_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d CaseFile"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai-soc-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/CaseFile
+      AUTO_CREATE_TABLES: "true"
+      DB_ECHO: "${DB_ECHO:-false}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      VIRUSTOTAL_API_KEY: "${VIRUSTOTAL_API_KEY:-}"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./frontend/ai-soc-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}"
+        NEXT_PUBLIC_CLERK_SIGN_IN_URL: "${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/auth/sign-in}"
+        NEXT_PUBLIC_CLERK_SIGN_UP_URL: "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/auth/sign-up}"
+        NEXT_PUBLIC_SENTRY_DISABLED: "${NEXT_PUBLIC_SENTRY_DISABLED:-true}"
+    container_name: ai-soc-dashboard
+    restart: unless-stopped
+    environment:
+      AI_SOC_API_URL: http://api:8000
+      NEXT_PUBLIC_AI_SOC_API_URL: "${NEXT_PUBLIC_AI_SOC_API_URL:-http://localhost:8000}"
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}"
+      NEXT_PUBLIC_SENTRY_DISABLED: "${NEXT_PUBLIC_SENTRY_DISABLED:-true}"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    profiles:
+      - dashboard
+
+volumes:
+  ai_soc_postgres_data:

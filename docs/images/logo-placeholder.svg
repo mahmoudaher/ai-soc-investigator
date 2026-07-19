@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-labelledby="title desc">
+  <title id="title">AI SOC Investigator logo placeholder</title>
+  <desc id="desc">Placeholder logo for AI SOC Investigator.</desc>
+  <rect width="180" height="180" rx="24" fill="#111827"/>
+  <circle cx="54" cy="62" r="17" fill="#38bdf8"/>
+  <circle cx="126" cy="62" r="17" fill="#a78bfa"/>
+  <circle cx="90" cy="118" r="17" fill="#22c55e"/>
+  <path d="M68 70l16 34M112 70l-16 34M72 62h36" stroke="#e5e7eb" stroke-width="8" stroke-linecap="round"/>
+  <text x="90" y="158" fill="#e5e7eb" font-family="Arial, sans-serif" font-size="17" font-weight="700" text-anchor="middle">AI SOC</text>
+</svg>

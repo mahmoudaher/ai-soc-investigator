@@ -4,7 +4,13 @@ Yes, this project should include visuals. The system is both security-focused an
 
 ## Recommended Folder
 
-Create:
+The current README uses replaceable placeholders in:
+
+```text
+docs/images/
+```
+
+Recommended final screenshot assets can also be stored in:
 
 ```text
 docs/assets/
@@ -74,4 +80,3 @@ If you only add three visuals, add:
 3. workflow graph
 
 Those three communicate the product, the analyst experience, and the backend architecture quickly.
-

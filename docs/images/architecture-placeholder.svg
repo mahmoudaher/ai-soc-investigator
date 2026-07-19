@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" role="img" aria-labelledby="title desc">
+  <title id="title">Architecture placeholder</title>
+  <desc id="desc">Placeholder for the AI SOC Investigator architecture diagram.</desc>
+  <rect width="1100" height="560" fill="#0f172a"/>
+  <text x="550" y="72" fill="#f8fafc" font-family="Arial, sans-serif" font-size="36" font-weight="700" text-anchor="middle">Architecture Placeholder</text>
+  <g font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">
+    <rect x="70" y="220" width="150" height="86" rx="12" fill="#dbeafe"/>
+    <text x="145" y="272" fill="#0f172a">Wazuh</text>
+    <rect x="280" y="220" width="150" height="86" rx="12" fill="#ede9fe"/>
+    <text x="355" y="272" fill="#0f172a">FastAPI</text>
+    <rect x="490" y="220" width="150" height="86" rx="12" fill="#fef3c7"/>
+    <text x="565" y="272" fill="#0f172a">LangGraph</text>
+    <rect x="700" y="220" width="150" height="86" rx="12" fill="#dcfce7"/>
+    <text x="775" y="272" fill="#0f172a">Postgres</text>
+    <rect x="910" y="220" width="150" height="86" rx="12" fill="#fee2e2"/>
+    <text x="985" y="272" fill="#0f172a">Next.js</text>
+  </g>
+  <path d="M220 263h60M430 263h60M640 263h60M850 263h60" stroke="#e5e7eb" stroke-width="8" stroke-linecap="round"/>
+  <text x="550" y="445" fill="#94a3b8" font-family="Arial, sans-serif" font-size="22" text-anchor="middle">Replace with final Wazuh to CaseFile to checkpoint flow</text>
+</svg>

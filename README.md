@@ -7,9 +7,6 @@
 
 <br />
 <div align="center">
-  <a href="https://github.com/mahmoudaher/ai-soc-investigator">
-    <img src="docs/images/logo-placeholder.svg" alt="AI SOC Investigator logo placeholder" width="90" height="90">
-  </a>
 
   <h3 align="center">AI SOC Investigator</h3>
 
@@ -59,7 +56,9 @@
 
 ## About The Project
 
-[![AI SOC Investigator overview placeholder][project-screenshot]](#architecture)
+<p align="center">
+  <img src="docs/images/UI.png" alt="AI SOC dashboard" width="86%">
+</p>
 
 AI SOC Investigator is a multi-agent incident analysis platform for security operations workflows. It is designed around one core idea: a SOC alert should not be handled by one large, unstructured model call. Instead, specialized agents collaborate on the same structured `CaseFile`, making every investigation step traceable, reviewable, and ready for analyst handoff.
 
@@ -231,25 +230,28 @@ npm install
 npm run dev
 ```
 
-### Visual Placeholders
+### Screenshots
 
-Placeholder images are included under `docs/images/` so you can replace them manually later without changing the README layout.
+The screenshots below show the dashboard and case review flow as it exists in the project: current case status, generated case files, raw alerts, timeline, case fields, and alert distribution.
 
 <p align="center">
-  <img src="docs/images/dashboard-placeholder.svg" alt="AI SOC dashboard screenshot placeholder" width="48%">
-  <img src="docs/images/case-detail-placeholder.svg" alt="AI SOC case detail placeholder" width="48%">
+  <img src="docs/images/UI.png" alt="AI SOC dashboard" width="48%">
+  <img src="docs/images/Current_Case.png" alt="Current case screen" width="48%">
 </p>
 
-Suggested final visuals:
+<p align="center">
+  <img src="docs/images/CaseFile.png" alt="Generated case file" width="48%">
+  <img src="docs/images/Raw_Alerts.png" alt="Raw alerts view" width="48%">
+</p>
 
-- Dashboard overview.
-- Case list.
-- Case detail page.
-- New case ingestion form.
-- Workflow graph from `docs/workflow.md`.
-- Database/checkpoint diagram.
+<p align="center">
+  <img src="docs/images/TimeLine.png" alt="Case timeline" width="48%">
+  <img src="docs/images/CaseFields.png" alt="Case fields form" width="48%">
+</p>
 
-See [docs/VISUALS.md](docs/VISUALS.md) for the project’s visual checklist.
+<p align="center">
+  <img src="docs/images/Histogram.png" alt="Alert histogram" width="48%">
+</p>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -276,7 +278,7 @@ Next.js SOC dashboard
 ```
 
 <p align="center">
-  <img src="docs/images/architecture-placeholder.svg" alt="AI SOC architecture diagram placeholder" width="82%">
+  <img src="docs/images/WorkFlow.png" alt="AI SOC investigation workflow" width="82%">
 </p>
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
@@ -306,17 +308,17 @@ python scripts/export_workflow_graph.py
 
 ```text
 .
-├── backend/                    # FastAPI app, agents, models, database layer, tests
-├── docs/                       # Architecture, workflow, deployment, GitHub, visual docs
-├── frontend/ai-soc-dashboard/  # Next.js analyst dashboard
-├── infrastructure/             # Infrastructure notes
-├── scripts/                    # Database and workflow utility scripts
-├── tool-runner/                # Placeholder for future isolated tool execution
-├── workers/                    # Placeholder for future async workers
-├── docker-compose.yml          # Local Compose stack
-├── requirements.txt            # Python backend dependencies
-├── simulate_wazuh.py           # Sends a sample Wazuh alert to the API
-└── test_workflow.py            # Local workflow/database demo script
+|-- backend/                    # FastAPI app, agents, models, database layer, tests
+|-- docs/                       # Architecture, workflow, deployment, GitHub, visual docs
+|-- frontend/ai-soc-dashboard/  # Next.js analyst dashboard
+|-- infrastructure/             # Infrastructure notes
+|-- scripts/                    # Database and workflow utility scripts
+|-- tool-runner/                # Planned isolated tool execution experiments
+|-- workers/                    # Planned async worker services
+|-- docker-compose.yml          # Local Compose stack
+|-- requirements.txt            # Python backend dependencies
+|-- simulate_wazuh.py           # Sends a sample Wazuh alert to the API
+`-- test_workflow.py            # Local workflow/database demo script
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -356,14 +358,10 @@ Use synthetic or sanitized alerts for demos.
 
 ## Roadmap
 
-- [ ] Replace placeholder images with final screenshots and architecture diagrams.
-- [ ] Add dashboard overview and case-detail visuals.
-- [ ] Add database/checkpoint diagram for `cases` and `case_checkpoints`.
-- [ ] Align full workflow tests with the active Gemini-backed agents and external-service configuration.
-- [ ] Expand isolated tool execution in `tool-runner/`.
-- [ ] Add production deployment hardening and secrets-management guidance.
-
-See the [open issues](https://github.com/mahmoudaher/ai-soc-investigator/issues) for proposed features and known issues.
+- Finish the analyst case lifecycle so notes, status changes, and approvals feel complete inside the dashboard.
+- Expand the test suite around Wazuh normalization, checkpoint storage, and agent output contracts.
+- Add clearer deployment notes for separating API, dashboard, PostgreSQL, and external API credentials.
+- Improve evidence handling with stronger hashing, audit history, and sanitized export examples.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -432,7 +430,6 @@ Project Link: [https://github.com/mahmoudaher/ai-soc-investigator](https://githu
 [stars-url]: https://github.com/mahmoudaher/ai-soc-investigator/stargazers
 [issues-shield]: https://img.shields.io/github/issues/mahmoudaher/ai-soc-investigator.svg?style=for-the-badge
 [issues-url]: https://github.com/mahmoudaher/ai-soc-investigator/issues
-[project-screenshot]: docs/images/project-overview-placeholder.svg
 [python-shield]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
 [python-url]: https://www.python.org/
 [fastapi-shield]: https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white

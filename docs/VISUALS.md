@@ -1,82 +1,16 @@
-# Visuals Guide
+# Visual Assets
 
-Yes, this project should include visuals. The system is both security-focused and workflow-heavy, so diagrams and screenshots will make the repository much easier to understand.
+The README now uses the screenshots and result images stored in `docs/images`.
 
-## Recommended Folder
+| File | Shows |
+| --- | --- |
+| `docs/images/UI.png` | AI SOC dashboard |
+| `docs/images/WorkFlow.png` | Investigation workflow |
+| `docs/images/Current_Case.png` | Current case screen |
+| `docs/images/CaseFile.png` | Generated case file |
+| `docs/images/Raw_Alerts.png` | Raw alerts view |
+| `docs/images/TimeLine.png` | Case timeline |
+| `docs/images/CaseFields.png` | Case fields form |
+| `docs/images/Histogram.png` | Alert histogram |
 
-The current README uses replaceable placeholders in:
-
-```text
-docs/images/
-```
-
-Recommended final screenshot assets can also be stored in:
-
-```text
-docs/assets/
-```
-
-Use names like:
-
-```text
-docs/assets/dashboard-overview.png
-docs/assets/cases-list.png
-docs/assets/case-detail.png
-docs/assets/new-case-ingestion.png
-docs/assets/checkpoint-timeline.png
-docs/assets/workflow-graph.png
-docs/assets/database-schema.png
-```
-
-## Best Visuals To Add
-
-1. Dashboard overview
-
-Shows the analyst landing page and summary metrics.
-
-2. Case list
-
-Shows active and historical investigations.
-
-3. Case detail
-
-Shows one investigation with status, entities, evidence, MITRE mappings, and report output.
-
-4. New case ingestion
-
-Shows how an analyst can send a Wazuh alert from the UI.
-
-5. Workflow diagram
-
-Use the Mermaid graph from `docs/workflow.md` or export it as an image.
-
-6. Database/checkpoint diagram
-
-Show the relationship between `cases`, `case_checkpoints`, and the embedded `CaseFile` snapshot.
-
-## README Screenshot Section
-
-After screenshots are added, place a section like this near the top of `README.md`:
-
-```md
-## Screenshots
-
-### Dashboard Overview
-![Dashboard Overview](docs/assets/dashboard-overview.png)
-
-### Case Detail
-![Case Detail](docs/assets/case-detail.png)
-
-### Workflow
-![Workflow Graph](docs/assets/workflow-graph.png)
-```
-
-## Priority
-
-If you only add three visuals, add:
-
-1. dashboard overview
-2. case detail
-3. workflow graph
-
-Those three communicate the product, the analyst experience, and the backend architecture quickly.
+Keep future screenshots sanitized and focused on the actual project flow so the repository stays easy to understand.
